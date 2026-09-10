@@ -36,6 +36,7 @@ import {
   History,
 } from 'lucide-react';
 import { PracticeTrack, LiveNote, QuestionResponse } from '../types';
+import { startLiveInterview, submitLiveAnswer } from '../services/liveInterview';
 
 interface LivePracticeViewProps {
   track: PracticeTrack;
@@ -140,6 +141,22 @@ export function LivePracticeView({
   const [interviewerSubtitle, setInterviewerSubtitle] = useState(
     "This is a medium difficulty problem. Feel free to ask clarifying questions."
   );
+
+  // Live AI interview state
+  const [liveQuestion, setLiveQuestion] = useState('');
+  const [liveTranscript, setLiveTranscript] = useState('');
+  const [interviewRound, setInterviewRound] = useState(0);
+  const [interviewStatus, setInterviewStatus] = useState<'starting' | 'speaking' | 'listening' | 'processing' | 'completed' | 'error'>('starting');
+  const [interviewError, setInterviewError] = useState('');
+  const [aiAudioUrl, setAiAudioUrl] = useState('');
+  const [completedQuestions, setCompletedQuestions] = useState<QuestionResponse[]>([]);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const sttSocketRef = useRef<WebSocket | null>(null);
+  const recorderRef = useRef<MediaRecorder | null>(null);
+  const sttStreamRef = useRef<MediaStream | null>(null);
+  const answerBufferRef = useRef('');
+  const interviewStartedRef = useRef(false);
+  const processingAnswerRef = useRef(false);
 
   // Code editor state
   const [selectedLanguage, setSelectedLanguage] = useState(track.defaultCode.language || 'python');
@@ -249,7 +266,13 @@ export function LivePracticeView({
 
   // Toggle Mute
   const handleToggleMute = () => {
-    setIsMuted(!isMuted);
+    const nextMuted = !isMuted;
+    setIsMuted(nextMuted);
+    if (nextMuted) {
+      stopSTT();
+    } else if (interviewStatus === 'listening') {
+      void startListening();
+    }
   };
 
   // Toggle Video
@@ -261,18 +284,179 @@ export function LivePracticeView({
     }
   };
 
+  const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+
+  const stopSTT = () => {
+    if (recorderRef.current && recorderRef.current.state !== 'inactive') recorderRef.current.stop();
+    recorderRef.current = null;
+    if (sttStreamRef.current) {
+      sttStreamRef.current.getTracks().forEach((track) => track.stop());
+      sttStreamRef.current = null;
+    }
+    if (sttSocketRef.current) {
+      try { sttSocketRef.current.send(JSON.stringify({ type: 'stop' })); } catch {}
+      sttSocketRef.current.close();
+      sttSocketRef.current = null;
+    }
+  };
+
+  const startListening = async () => {
+    if (!sessionId || isMuted || interviewStatus === 'completed' || processingAnswerRef.current) return;
+    try {
+      stopSTT();
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      sttStreamRef.current = stream;
+      const wsProtocol = API_BASE.startsWith('https') ? 'wss' : 'ws';
+      const wsHost = API_BASE.replace(/^https?:\/\//, '');
+      const socket = new WebSocket(`${wsProtocol}://${wsHost}/ws/live-interview/${sessionId}`);
+      sttSocketRef.current = socket;
+      answerBufferRef.current = '';
+      setLiveTranscript('');
+
+      socket.onopen = () => {
+        setInterviewStatus('listening');
+        const preferred = 'audio/webm;codecs=opus';
+        const mimeType = MediaRecorder.isTypeSupported(preferred) ? preferred : 'audio/webm';
+        const recorder = new MediaRecorder(stream, { mimeType });
+        recorderRef.current = recorder;
+        recorder.ondataavailable = (event) => {
+          if (event.data.size > 0 && socket.readyState === WebSocket.OPEN) {
+            event.data.arrayBuffer().then((buffer) => socket.send(buffer));
+          }
+        };
+        recorder.start(250);
+      };
+
+      socket.onmessage = async (event) => {
+        const data = JSON.parse(event.data);
+        if (data.type === 'transcript_partial') {
+          answerBufferRef.current = data.transcript || '';
+          setLiveTranscript(answerBufferRef.current);
+        } else if (data.type === 'transcript_final') {
+          const text = (data.transcript || answerBufferRef.current).trim();
+          if (!text || processingAnswerRef.current) return;
+          answerBufferRef.current = text;
+          setLiveTranscript(text);
+          processingAnswerRef.current = true;
+          setInterviewStatus('processing');
+          stopSTT();
+          try {
+            const result = await submitLiveAnswer(sessionId, text);
+            const newQA: QuestionResponse = {
+              id: `${sessionId}-${interviewRound}`,
+              question: liveQuestion,
+              response: text,
+            };
+            const allQuestions = [...completedQuestions, newQA];
+            setCompletedQuestions(allQuestions);
+            if (result.completed) {
+              setInterviewRound(5);
+              setInterviewStatus('completed');
+              setInterviewerSubtitle('Interview completed. Thank you for your time.');
+              onEndSession({
+                track,
+                duration: formatTime(1477 - secondsRemaining),
+                questions: allQuestions,
+                code: codeContent,
+                language: selectedLanguage,
+                sessionId,
+              });
+            } else {
+              setInterviewRound(result.round);
+              setLiveQuestion(result.question || '');
+              setInterviewerSubtitle(result.question || '');
+              setAiAudioUrl(`${API_BASE}${result.audio_url || ''}`);
+              setLiveTranscript('');
+              answerBufferRef.current = '';
+            }
+          } catch (error) {
+            console.error(error);
+            setInterviewError(error instanceof Error ? error.message : 'Unable to process your answer.');
+            setInterviewStatus('error');
+          } finally {
+            processingAnswerRef.current = false;
+          }
+        } else if (data.type === 'error') {
+          setInterviewError(data.message || 'Deepgram STT error.');
+          setInterviewStatus('error');
+          stopSTT();
+        }
+      };
+
+      socket.onerror = () => {
+        setInterviewError('Unable to connect to Deepgram STT.');
+        setInterviewStatus('error');
+        stopSTT();
+      };
+    } catch (error) {
+      console.error(error);
+      setInterviewError('Microphone permission is required for the interview.');
+      setInterviewStatus('error');
+    }
+  };
+
+  const playQuestionAudio = async (url: string) => {
+    if (!audioRef.current || !url) return;
+    audioRef.current.src = url;
+    audioRef.current.load();
+    setInterviewStatus('speaking');
+    setActiveSpeaker('interviewer');
+    try {
+      await audioRef.current.play();
+      setInterviewError('');
+    } catch (error) {
+      console.warn('Browser blocked autoplay:', error);
+      setInterviewError('Browser blocked AI audio. Use Play AI question once to continue.');
+    }
+  };
+
+  useEffect(() => {
+    if (!sessionId || interviewStartedRef.current) return;
+    interviewStartedRef.current = true;
+    const start = async () => {
+      try {
+        setInterviewStatus('starting');
+        const result = await startLiveInterview(sessionId, track.title, difficulty);
+        setInterviewRound(result.round);
+        setLiveQuestion(result.question || '');
+        setInterviewerSubtitle(result.question || '');
+        const url = `${API_BASE}${result.audio_url || ''}`;
+        setAiAudioUrl(url);
+      } catch (error) {
+        console.error(error);
+        setInterviewError(error instanceof Error ? error.message : 'Unable to start the AI interview.');
+        setInterviewStatus('error');
+      }
+    };
+    void start();
+    return () => {
+      stopSTT();
+      if (audioRef.current) { audioRef.current.pause(); audioRef.current.src = ''; }
+    };
+  }, [sessionId]);
+
+  useEffect(() => {
+    if (!aiAudioUrl || interviewStatus === 'completed') return;
+    void playQuestionAudio(aiAudioUrl);
+  }, [aiAudioUrl]);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    const onEnded = () => {
+      if (interviewStatus === 'speaking') {
+        setActiveSpeaker('candidate');
+        void startListening();
+      }
+    };
+    audio.addEventListener('ended', onEnded);
+    return () => audio.removeEventListener('ended', onEnded);
+  }, [interviewStatus, aiAudioUrl]);
+
   // End Session
   const handleEndSession = () => {
-    const recordedQA: QuestionResponse[] = [
-      {
-        id: 'qa-1',
-        question: 'Two Sum - Algorithmic implementation & hash table complexity analysis',
-        response:
-          'Utilized single-pass hash map to achieve O(N) linear time complexity with O(N) space trade-off.',
-        score: 92,
-        feedback: 'Excellent structural clarity, clean corner case handling.',
-      },
-    ];
+    stopSTT();
+    const recordedQA: QuestionResponse[] = completedQuestions;
 
     onEndSession({
       track,
@@ -300,7 +484,9 @@ export function LivePracticeView({
     difficulty === 'Beginner' ? 'Easy' : difficulty === 'Advanced' ? 'Hard' : 'Medium';
 
   return (
-    <div className="h-screen w-screen bg-[#0B0F19] text-white flex flex-col overflow-hidden font-sans select-none">
+    <>
+      <audio ref={audioRef} preload="auto" className="hidden" />
+      <div className="h-screen w-screen bg-[#0B0F19] text-white flex flex-col overflow-hidden font-sans select-none">
       {/* Top macOS Style Window Bar with Search */}
       <div className="h-8 bg-[#0B0F19] border-b border-neutral-800/60 px-4 flex items-center justify-between shrink-0">
         <div className="flex items-center gap-2">
@@ -963,64 +1149,51 @@ export function LivePracticeView({
           <div className="flex-1 overflow-y-auto p-5 text-xs text-neutral-300 space-y-4 font-sans leading-relaxed">
             {activeTab === 'question' && (
               <>
-                <h3 className="text-sm font-bold text-white tracking-tight">
-                  Two Sum
-                </h3>
-
-                <p className="text-neutral-300 text-[13px] leading-relaxed">
-                  Given an array of integers <code className="text-neutral-200 bg-neutral-800 px-1 py-0.5 rounded">nums</code> and an integer <code className="text-neutral-200 bg-neutral-800 px-1 py-0.5 rounded">target</code>, return the indices of the two numbers such that they add up to target.
-                </p>
-                <p className="text-neutral-300 text-[13px] leading-relaxed">
-                  You may assume that each input would have exactly one solution, and you may not use the same element twice.
-                </p>
-
-                {/* Example 1 */}
-                <div className="space-y-1.5 pt-1">
-                  <span className="text-xs font-bold text-white block">
-                    Example 1:
+                <div className="flex items-center justify-between gap-3">
+                  <h3 className="text-sm font-bold text-white tracking-tight">
+                    Question {interviewRound || 1} <span className="text-neutral-500">/ 5</span>
+                  </h3>
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-semibold border ${
+                    interviewStatus === 'listening' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+                    interviewStatus === 'speaking' ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' :
+                    interviewStatus === 'completed' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+                    'bg-neutral-800 text-neutral-400 border-neutral-700'
+                  }`}>
+                    {interviewStatus === 'listening' ? 'Your turn' : interviewStatus === 'speaking' ? 'AI speaking' : interviewStatus === 'completed' ? 'Completed' : interviewStatus === 'starting' ? 'Preparing' : 'Processing'}
                   </span>
-                  <div className="p-3 rounded-xl bg-[#090C13] border border-neutral-800 font-mono text-[11px] text-neutral-300 leading-relaxed">
-                    <div><span className="text-neutral-400">Input:</span> nums = [2, 7, 11, 15], target = 9</div>
-                    <div><span className="text-neutral-400">Output:</span> [0, 1]</div>
-                    <div><span className="text-neutral-400">Explanation:</span> Because nums[0] + nums[1] == 2 + 7 == 9, we return [0, 1].</div>
-                  </div>
                 </div>
 
-                {/* Example 2 */}
-                <div className="space-y-1.5 pt-1">
-                  <span className="text-xs font-bold text-white block">
-                    Example 2:
-                  </span>
-                  <div className="p-3 rounded-xl bg-[#090C13] border border-neutral-800 font-mono text-[11px] text-neutral-300 leading-relaxed">
-                    <div><span className="text-neutral-400">Input:</span> nums = [3, 2, 4], target = 6</div>
-                    <div><span className="text-neutral-400">Output:</span> [1, 2]</div>
-                  </div>
+                <div className="p-3 rounded-xl bg-[#090C13] border border-neutral-800">
+                  <p className="text-neutral-200 text-[13px] leading-relaxed">
+                    {liveQuestion || 'Preparing your first interview question...'}
+                  </p>
                 </div>
 
-                {/* Collapsible Constraints */}
-                <div className="pt-2 border-t border-neutral-800/80">
+                {liveTranscript && (
+                  <div className="space-y-1.5">
+                    <span className="text-xs font-bold text-white block">Your answer</span>
+                    <div className="p-3 rounded-xl bg-[#161B24] border border-neutral-800 text-[12px] text-neutral-300 leading-relaxed">
+                      {liveTranscript}
+                    </div>
+                  </div>
+                )}
+
+                {interviewError && (
+                  <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-[11px] text-red-300 leading-relaxed">
+                    {interviewError}
+                  </div>
+                )}
+
+                {aiAudioUrl && interviewStatus !== 'completed' && (
                   <button
                     type="button"
-                    onClick={() => setConstraintsOpen(!constraintsOpen)}
-                    className="flex items-center justify-between w-full text-xs font-bold text-white py-1 hover:text-blue-400 transition-colors"
+                    onClick={() => void playQuestionAudio(aiAudioUrl)}
+                    className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-[#161B24] hover:bg-neutral-800 border border-neutral-700 text-xs font-semibold text-blue-400 hover:text-blue-300 transition-all"
                   >
-                    <span>Constraints</span>
-                    {constraintsOpen ? (
-                      <ChevronUp className="w-4 h-4 text-neutral-400" />
-                    ) : (
-                      <ChevronDown className="w-4 h-4 text-neutral-400" />
-                    )}
+                    <Volume2 className="w-4 h-4" />
+                    <span>{interviewStatus === 'speaking' ? 'AI is speaking...' : 'Play AI question'}</span>
                   </button>
-
-                  {constraintsOpen && (
-                    <ul className="mt-2 space-y-1.5 text-[11px] font-mono text-neutral-400 pl-1 list-disc list-inside">
-                      <li>2 &le; nums.length &le; 10<sup>4</sup></li>
-                      <li>-10<sup>9</sup> &le; nums[i] &le; 10<sup>9</sup></li>
-                      <li>-10<sup>9</sup> &le; target &le; 10<sup>9</sup></li>
-                      <li>Only one valid answer exists.</li>
-                    </ul>
-                  )}
-                </div>
+                )}
 
                 {/* Quick Switch to VS Code Button */}
                 <div className="pt-3">
@@ -1081,6 +1254,7 @@ export function LivePracticeView({
           </div>
         </div>
       </div>
-    </div>
+      </div>
+    </>
   );
 }
