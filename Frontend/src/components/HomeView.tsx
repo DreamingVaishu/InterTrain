@@ -14,7 +14,7 @@ export function HomeView({ folders, onSelectFolder, onStartPractice, userName }:
   const displayName = userName || 'Billu badmash';
 
   return (
-    <div className="relative min-h-screen bg-[#DCDFE2] text-neutral-900 p-6 md:p-10 lg:p-12 overflow-hidden flex flex-col justify-between">
+    <div className="relative min-h-screen bg-[#DCDFE2] text-neutral-900 p-6 md:p-10 lg:p-12 flex flex-col justify-between overflow-y-auto">
       {/* Background Watermark silhouette from screenshot */}
       <GraduationWatermark />
 

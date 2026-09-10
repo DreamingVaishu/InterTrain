@@ -15,23 +15,28 @@ import {
   Terminal,
   RotateCcw,
   CheckCircle2,
+  Copy,
+  ArrowLeft,
 } from 'lucide-react';
 import { PracticeTrack, LiveNote, QuestionResponse } from '../types';
 
 interface LivePracticeViewProps {
   track: PracticeTrack;
+  sessionId?: string;
   onEndSession: (completedSession: {
     track: PracticeTrack;
     duration: string;
     questions: QuestionResponse[];
     code: string;
     language: string;
+    sessionId?: string;
   }) => void;
   onExit: () => void;
 }
 
 export function LivePracticeView({
   track,
+  sessionId,
   onEndSession,
   onExit,
 }: LivePracticeViewProps) {
@@ -59,6 +64,16 @@ export function LivePracticeView({
 
   // Interview Questions & Responses
   const [currentQIndex, setCurrentQIndex] = useState(0);
+
+  // Session ID copy indicator
+  const [copiedSessionId, setCopiedSessionId] = useState(false);
+
+  const handleCopySessionId = () => {
+    if (!sessionId) return;
+    navigator.clipboard.writeText(sessionId);
+    setCopiedSessionId(true);
+    setTimeout(() => setCopiedSessionId(false), 2000);
+  };
   const [userSpeechInput, setUserSpeechInput] = useState('');
   const [recordedQA, setRecordedQA] = useState<QuestionResponse[]>([]);
 
@@ -253,6 +268,7 @@ export function LivePracticeView({
       questions: finalQuestions,
       code: codeContent,
       language: selectedLanguage,
+      sessionId,
     });
   };
 
@@ -260,25 +276,56 @@ export function LivePracticeView({
     track.questions[currentQIndex] || track.questions[0];
 
   return (
-    <div className="min-h-screen bg-[#121212] text-neutral-100 flex flex-col justify-between overflow-x-hidden font-sans">
-      {/* Top Header Bar from screenshot */}
-      <header className="h-14 bg-[#141414] border-b border-neutral-800 flex items-center justify-between px-6 z-20 shrink-0">
-        <div className="flex items-center gap-3">
+    <div className="h-screen max-h-screen bg-[#121212] text-neutral-100 flex flex-col overflow-hidden font-sans">
+      {/* Top Header Bar */}
+      <header className="h-14 bg-[#141414] border-b border-neutral-800 flex items-center justify-between px-4 sm:px-6 z-20 shrink-0">
+        <div className="flex items-center gap-3 min-w-0">
+          {/* Back to Dashboard Button */}
+          <button
+            type="button"
+            onClick={onExit}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-neutral-800 hover:bg-neutral-700 text-neutral-200 hover:text-white transition-all border border-neutral-700 cursor-pointer shadow-sm group shrink-0"
+            title="Exit interview and return to dashboard"
+          >
+            <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
+            <span className="hidden sm:inline">Back</span>
+          </button>
+
+          <span className="text-neutral-700 font-light hidden sm:inline">|</span>
+
           {/* InterTrain Brand */}
-          <span className="text-lg font-black tracking-tight text-white flex items-center gap-2">
+          <span className="text-lg font-black tracking-tight text-white flex items-center gap-2 shrink-0">
             InterTrain
           </span>
-          <span className="text-neutral-500 font-light">|</span>
-          <span className="text-sm font-medium text-neutral-300 truncate max-w-xs md:max-w-xl">
+          <span className="text-neutral-500 font-light hidden md:inline">|</span>
+          <span className="text-sm font-medium text-neutral-300 truncate max-w-[150px] sm:max-w-xs md:max-w-md">
             {track.title}
           </span>
+          {sessionId && (
+            <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-neutral-900 border border-neutral-800 text-xs font-mono text-neutral-400 shadow-inner">
+              <span className="text-neutral-500 font-sans text-[11px]">Section ID:</span>
+              <span className="text-cyan-400 font-semibold tracking-wide">{sessionId}</span>
+              <button
+                type="button"
+                onClick={handleCopySessionId}
+                className="ml-1 text-neutral-400 hover:text-white transition-colors cursor-pointer p-0.5 rounded hover:bg-neutral-800"
+                title="Copy Section ID for backend API testing"
+              >
+                {copiedSessionId ? (
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+                ) : (
+                  <Copy className="w-3.5 h-3.5" />
+                )}
+              </button>
+            </div>
+          )}
         </div>
 
-        {/* View Layout Mode Switcher */}
-        <div className="flex items-center gap-2">
+        {/* View Layout Mode Switcher & Exit */}
+        <div className="flex items-center gap-2 shrink-0">
           <button
             onClick={() => setLayoutMode(layoutMode === 'code' ? 'video' : 'code')}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-neutral-800 hover:bg-neutral-700 text-neutral-300 transition-colors border border-neutral-700/50"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-neutral-800 hover:bg-neutral-700 text-neutral-300 transition-colors border border-neutral-700/50 cursor-pointer"
             title="Toggle between Code Workspace & Full Video"
           >
             {layoutMode === 'code' ? (
@@ -293,15 +340,25 @@ export function LivePracticeView({
               </>
             )}
           </button>
+
+          <button
+            type="button"
+            onClick={onExit}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-950/40 hover:bg-red-900/60 text-red-300 hover:text-red-100 transition-colors border border-red-800/50 cursor-pointer"
+            title="Leave this interview session"
+          >
+            <PhoneOff className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Leave</span>
+          </button>
         </div>
       </header>
 
       {/* Main Grid: Left Column (Participants) + Center Area (Editor or Video) + Right Column (Summary) */}
-      <div className="flex-1 grid grid-cols-1 lg:grid-cols-12 overflow-hidden">
+      <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-12 overflow-y-auto lg:overflow-hidden">
         {/* Left Column: Stacked Participant Boxes from Screenshot 5 */}
-        <div className="lg:col-span-2 bg-[#121212] p-3 flex flex-col gap-3 border-r border-neutral-800 shrink-0">
+        <div className="lg:col-span-2 bg-[#121212] p-2.5 flex flex-col gap-2.5 border-r border-neutral-800 min-h-0 overflow-y-auto shrink-0">
           {/* Participant 1: "You" */}
-          <div className="relative flex-1 min-h-[140px] rounded-xl bg-[#616161] border border-neutral-700 overflow-hidden flex flex-col justify-end p-3 shadow-inner group">
+          <div className="relative flex-1 min-h-[90px] max-h-[170px] rounded-xl bg-[#616161] border border-neutral-700 overflow-hidden flex flex-col justify-end p-2.5 shadow-inner group">
             {hasCameraPermission && !isCameraOff ? (
               <video
                 ref={videoRef}
@@ -312,7 +369,7 @@ export function LivePracticeView({
               />
             ) : (
               <div className="absolute inset-0 flex flex-col items-center justify-center bg-neutral-600">
-                <div className="w-12 h-12 rounded-full bg-neutral-500/80 flex items-center justify-center text-white text-lg font-bold shadow-sm">
+                <div className="w-10 h-10 rounded-full bg-neutral-500/80 flex items-center justify-center text-white text-base font-bold shadow-sm">
                   You
                 </div>
                 {isCameraOff && (
@@ -338,7 +395,7 @@ export function LivePracticeView({
 
           {/* Participant 2: "Gemini" */}
           <div
-            className={`relative flex-1 min-h-[140px] rounded-xl bg-[#616161] border overflow-hidden flex flex-col justify-end p-3 transition-all ${
+            className={`relative flex-1 min-h-[90px] max-h-[170px] rounded-xl bg-[#616161] border overflow-hidden flex flex-col justify-end p-2.5 transition-all ${
               speakingParticipant === 'Gemini'
                 ? 'border-blue-400/80 ring-2 ring-blue-500/30'
                 : 'border-neutral-700'
@@ -348,11 +405,11 @@ export function LivePracticeView({
             <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-b from-[#4a4a4a] to-[#3a3a3a]">
               <div className="relative">
                 <div
-                  className={`w-12 h-12 rounded-2xl bg-gradient-to-tr from-[#1a73e8] to-[#4285f4] flex items-center justify-center shadow-lg transition-transform ${
+                  className={`w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#1a73e8] to-[#4285f4] flex items-center justify-center shadow-lg transition-transform ${
                     speakingParticipant === 'Gemini' ? 'scale-105' : 'scale-95 opacity-85'
                   }`}
                 >
-                  <Sparkles className="w-6 h-6 text-white" />
+                  <Sparkles className="w-5 h-5 text-white" />
                 </div>
                 {speakingParticipant === 'Gemini' && (
                   <span className="absolute -inset-1 rounded-2xl border-2 border-blue-400 animate-ping opacity-30" />
@@ -360,7 +417,7 @@ export function LivePracticeView({
               </div>
 
               {speakingParticipant === 'Gemini' && (
-                <span className="text-[11px] text-blue-200 mt-2 font-medium flex items-center gap-1.5">
+                <span className="text-[11px] text-blue-200 mt-1.5 font-medium flex items-center gap-1.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
                   Speaking...
                 </span>
@@ -375,7 +432,7 @@ export function LivePracticeView({
 
           {/* Participant 3: "Claude" */}
           <div
-            className={`relative flex-1 min-h-[140px] rounded-xl bg-[#616161] border overflow-hidden flex flex-col justify-end p-3 transition-all ${
+            className={`relative flex-1 min-h-[90px] max-h-[170px] rounded-xl bg-[#616161] border overflow-hidden flex flex-col justify-end p-2.5 transition-all ${
               speakingParticipant === 'Claude'
                 ? 'border-amber-400/80 ring-2 ring-amber-500/30'
                 : 'border-neutral-700'
@@ -385,11 +442,11 @@ export function LivePracticeView({
             <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-b from-[#4a4a4a] to-[#3a3a3a]">
               <div className="relative">
                 <div
-                  className={`w-12 h-12 rounded-2xl bg-gradient-to-tr from-[#c2410c] to-[#ea580c] flex items-center justify-center shadow-lg transition-transform ${
+                  className={`w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#c2410c] to-[#ea580c] flex items-center justify-center shadow-lg transition-transform ${
                     speakingParticipant === 'Claude' ? 'scale-105' : 'scale-95 opacity-85'
                   }`}
                 >
-                  <span className="text-white text-base font-black">C</span>
+                  <span className="text-white text-sm font-black">C</span>
                 </div>
                 {speakingParticipant === 'Claude' && (
                   <span className="absolute -inset-1 rounded-2xl border-2 border-amber-400 animate-ping opacity-30" />
@@ -397,7 +454,7 @@ export function LivePracticeView({
               </div>
 
               {speakingParticipant === 'Claude' && (
-                <span className="text-[11px] text-amber-200 mt-2 font-medium flex items-center gap-1.5">
+                <span className="text-[11px] text-amber-200 mt-1.5 font-medium flex items-center gap-1.5">
                   <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
                   Speaking...
                 </span>
@@ -412,7 +469,7 @@ export function LivePracticeView({
         </div>
 
         {/* Center Area: Code Editor & Console (Screenshot 5) OR Full Video (Screenshot 6) */}
-        <div className="lg:col-span-7 bg-[#1c1c1c] flex flex-col overflow-hidden border-r border-neutral-800">
+        <div className="lg:col-span-7 bg-[#1c1c1c] flex flex-col min-h-0 overflow-hidden border-r border-neutral-800">
           {layoutMode === 'code' ? (
             <>
               {/* Question Banner */}
@@ -459,9 +516,9 @@ export function LivePracticeView({
               </div>
 
               {/* Code Editor Workspace with Line Numbers */}
-              <div className="flex-1 flex overflow-hidden bg-[#161616] font-mono text-xs md:text-sm">
+              <div className="flex-1 min-h-0 flex overflow-hidden bg-[#161616] font-mono text-xs md:text-sm">
                 {/* Line numbers column */}
-                <div className="w-12 py-3 px-2 select-none text-neutral-600 bg-[#161616] border-r border-neutral-800/60 text-right leading-6 font-medium">
+                <div className="w-12 py-3 px-2 select-none text-neutral-600 bg-[#161616] border-r border-neutral-800/60 text-right leading-6 font-medium overflow-hidden">
                   {codeContent.split('\n').map((_, i) => (
                     <div key={i}>{i + 1}</div>
                   ))}
@@ -473,12 +530,12 @@ export function LivePracticeView({
                   value={codeContent}
                   onChange={(e) => setCodeContent(e.target.value)}
                   spellCheck={false}
-                  className="flex-1 p-3 bg-transparent text-neutral-200 resize-none focus:outline-hidden leading-6 font-mono selection:bg-blue-900/60 scrollbar-thin scrollbar-thumb-neutral-700"
+                  className="flex-1 min-h-0 p-3 bg-transparent text-neutral-200 resize-none focus:outline-hidden leading-6 font-mono selection:bg-blue-900/60 overflow-y-auto scrollbar-thin scrollbar-thumb-neutral-700"
                 />
               </div>
 
               {/* Output Console / Interactive Verbal Response Section */}
-              <div className="h-44 bg-[#1a1a1a] border-t border-neutral-800 flex flex-col shrink-0">
+              <div className="h-36 bg-[#1a1a1a] border-t border-neutral-800 flex flex-col shrink-0">
                 <div className="px-4 py-1.5 bg-[#141414] border-b border-neutral-800/80 flex items-center justify-between text-xs text-neutral-400">
                   <span className="flex items-center gap-1.5 font-semibold">
                     <Terminal className="w-3.5 h-3.5 text-neutral-500" />
@@ -567,22 +624,23 @@ export function LivePracticeView({
         </div>
 
         {/* Right Column: Warm Cream "Summary" Sidebar (Screenshot 5 & 6) */}
-        <div className="lg:col-span-3 bg-[#F6F4EB] text-neutral-900 p-6 flex flex-col justify-between overflow-y-auto border-l border-neutral-300">
-          <div>
+        {/* Right Column: Warm Cream "Summary" Sidebar (Screenshot 5 & 6) */}
+        <div className="lg:col-span-3 bg-[#F6F4EB] text-neutral-900 p-4 flex flex-col min-h-0 overflow-hidden border-l border-neutral-300">
+          <div className="flex flex-col min-h-0 flex-1">
             {/* Header: Summary */}
-            <h2 className="text-2xl font-bold text-neutral-900 tracking-tight mb-6 font-sans">
+            <h2 className="text-xl font-bold text-neutral-900 tracking-tight mb-3 font-sans shrink-0">
               Summary
             </h2>
 
             {/* Note Cards Stack matching Screenshot 5 & 6 */}
-            <div className="space-y-4">
+            <div className="flex-1 min-h-0 overflow-y-auto space-y-3 pr-1 scrollbar-thin scrollbar-thumb-neutral-400">
               {liveNotes.map((note, index) => {
                 const isPrimary = index === 0;
 
                 return (
                   <div
                     key={note.id}
-                    className={`rounded-2xl p-4.5 transition-all shadow-xs ${
+                    className={`rounded-2xl p-3.5 transition-all shadow-xs ${
                       isPrimary
                         ? 'bg-[#566c7b] text-white shadow-sm'
                         : 'bg-[#cfd4d8] text-neutral-800'
@@ -591,7 +649,7 @@ export function LivePracticeView({
                     {/* Circle marker on top left matching screenshot */}
                     <div className="flex items-center gap-2 mb-2">
                       <div
-                        className={`w-4 h-4 rounded-full ${
+                        className={`w-3.5 h-3.5 rounded-full ${
                           isPrimary ? 'bg-white/40' : 'bg-neutral-500/40'
                         }`}
                       />
@@ -625,7 +683,7 @@ export function LivePracticeView({
           </div>
 
           {/* Quick round progress indicator */}
-          <div className="mt-8 pt-4 border-t border-neutral-300/80">
+          <div className="shrink-0 mt-3 pt-3 border-t border-neutral-300/80">
             <div className="flex justify-between text-xs font-semibold text-neutral-700 mb-1.5">
               <span>Interview Coverage</span>
               <span>{Math.round(((currentQIndex + 1) / track.questions.length) * 100)}%</span>
@@ -689,12 +747,20 @@ export function LivePracticeView({
           </button>
         </div>
 
-        {/* Coral/Red Pill 'End' Button from screenshot */}
-        <div>
+        {/* Actions: Leave and End */}
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={onExit}
+            className="px-4 py-2 rounded-full bg-neutral-800 hover:bg-neutral-700 text-neutral-300 hover:text-white font-medium text-xs border border-neutral-700 transition-all cursor-pointer"
+            title="Leave interview and return to dashboard"
+          >
+            Leave
+          </button>
           <button
             id="end-session-btn"
             onClick={handleEnd}
-            className="px-8 py-2.5 rounded-full bg-[#f84949] hover:bg-[#e03838] active:scale-98 text-white font-bold text-base shadow-lg transition-all cursor-pointer"
+            className="px-6 sm:px-8 py-2.5 rounded-full bg-[#f84949] hover:bg-[#e03838] active:scale-98 text-white font-bold text-base shadow-lg transition-all cursor-pointer"
           >
             End
           </button>

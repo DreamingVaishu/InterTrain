@@ -53,7 +53,7 @@ export default function LoginPage({ onLogin, initialMode = 'signup' }: LoginPage
   }
 
   return (
-    <div className="min-h-screen bg-brand-dark flex relative overflow-hidden font-sans">
+    <div className="min-h-screen bg-brand-dark flex relative overflow-y-auto font-sans">
       {/* ── Ambient background effects ── */}
       <div className="absolute inset-0 pointer-events-none overflow-hidden">
         {/* Top-right cyan orb */}

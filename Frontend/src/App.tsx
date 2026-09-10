@@ -11,6 +11,7 @@ import { AnalyticsView } from './components/AnalyticsView';
 import { BestPracticesView } from './components/BestPracticesView';
 import { SettingsModal } from './components/SettingsModal';
 import LoginPage, { UserAuthData } from './components/auth/LoginPage';
+import { generateSessionId, extractSessionIdFromUrl } from './utils/session';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<UserAuthData | null>(() => {
@@ -25,7 +26,13 @@ export default function App() {
     return null;
   });
 
-  const [currentTab, setCurrentTab] = useState<NavTab>('home');
+  // Track the active 19-digit Section/Session ID for backend integration (e.g. 2567837851963606030)
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(() => extractSessionIdFromUrl());
+
+  const [currentTab, setCurrentTab] = useState<NavTab>(() => {
+    const initialSession = extractSessionIdFromUrl();
+    return initialSession ? 'live-practice' : 'home';
+  });
   const [folders, setFolders] = useState<HistoryFolder[]>(() => {
     const saved = localStorage.getItem('intertrain_folders');
     if (saved) {
@@ -52,6 +59,8 @@ export default function App() {
   const handleLogout = () => {
     setCurrentUser(null);
     localStorage.removeItem('intertrain_user');
+    setActiveSessionId(null);
+    window.history.pushState(null, '', '/');
     setCurrentTab('home');
   };
 
@@ -60,19 +69,39 @@ export default function App() {
     localStorage.setItem('intertrain_folders', JSON.stringify(folders));
   }, [folders]);
 
+  // Sync browser URL & popstate for /projects/:sessionId
+  useEffect(() => {
+    const handlePopState = () => {
+      const poppedSessionId = extractSessionIdFromUrl();
+      if (poppedSessionId) {
+        setActiveSessionId(poppedSessionId);
+        setCurrentTab('live-practice');
+      } else {
+        setActiveSessionId(null);
+        setCurrentTab((prev) => (prev === 'live-practice' ? 'home' : prev));
+      }
+    };
+
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
+
   // Navigate to folder review
   const handleSelectFolder = (folderId: string) => {
     setSelectedFolderId(folderId);
     setCurrentTab('review');
   };
 
-  // Launch live practice session from a track
+  // Launch live practice session from a track with 19-digit section ID in URL (e.g. /projects/2567837851963606030)
   const handleStartPracticeTrack = (track: PracticeTrack) => {
+    const newSessionId = generateSessionId();
     setActiveTrack(track);
+    setActiveSessionId(newSessionId);
+    window.history.pushState({ sessionId: newSessionId, trackId: track.id }, '', `/projects/${newSessionId}`);
     setCurrentTab('live-practice');
   };
 
-  // Start again from review screen
+  // Start again from review screen with new unique 19-digit section ID in URL
   const handleStartAgain = (folderTitle: string) => {
     const matchedTrack =
       PRACTICE_TRACKS.find(
@@ -80,7 +109,10 @@ export default function App() {
                folderTitle.toLowerCase().includes(t.title.toLowerCase())
       ) || PRACTICE_TRACKS[0];
 
+    const newSessionId = generateSessionId();
     setActiveTrack(matchedTrack);
+    setActiveSessionId(newSessionId);
+    window.history.pushState({ sessionId: newSessionId, trackId: matchedTrack.id }, '', `/projects/${newSessionId}`);
     setCurrentTab('live-practice');
   };
 
@@ -91,7 +123,12 @@ export default function App() {
     questions: QuestionResponse[];
     code: string;
     language: string;
+    sessionId?: string;
   }) => {
+    // Reset section URL when session concludes
+    setActiveSessionId(null);
+    window.history.pushState(null, '', '/');
+
     // Determine matching folder or create/update
     const folderId = completedSession.track.id.includes('devops')
       ? 'devops'
@@ -165,8 +202,13 @@ export default function App() {
     return (
       <LivePracticeView
         track={activeTrack}
+        sessionId={activeSessionId || undefined}
         onEndSession={handleEndLiveSession}
-        onExit={() => setCurrentTab('home')}
+        onExit={() => {
+          setActiveSessionId(null);
+          window.history.pushState(null, '', '/');
+          setCurrentTab('home');
+        }}
       />
     );
   }
