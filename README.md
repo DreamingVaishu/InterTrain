@@ -1,0 +1,2 @@
+# InterTrain
+InterTrain is an end-to-end simulation environment engineered to prepare individuals for technical interviews. It bridges the gap between passive theoretical studying and the dynamic, multi-modal reality of live evaluation. By replacing static question lists with an adaptive voice-and-video interface, InterTrain challenges users to solve live problems, communicate cleanly, and master high-pressure environments.
