@@ -1,18 +1,16 @@
-import { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Mic,
   MicOff,
   Video,
   VideoOff,
   ArrowLeft,
-  Sparkles,
-  Bot,
   CheckCircle2,
   Copy,
-  Layers,
   ArrowRight,
   ShieldCheck,
-  Zap,
+  Clock,
+  Volume2,
 } from 'lucide-react';
 import { PracticeTrack, InterviewConfig } from '../types';
 
@@ -35,13 +33,7 @@ export function InterviewSetupView({
   const [isMicOn, setIsMicOn] = useState(true);
   const [hasCameraPermission, setHasCameraPermission] = useState(false);
   const [copiedSessionId, setCopiedSessionId] = useState(false);
-
-  // Difficulty level selection
-  const [selectedDifficulty, setSelectedDifficulty] = useState<'Beginner' | 'Intermediate' | 'Advanced'>(
-    track.difficulty || 'Intermediate'
-  );
-
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const [isPlayingAudioTest, setIsPlayingAudioTest] = useState(false);
 
   // Copy session id
   const handleCopySessionId = () => {
@@ -53,7 +45,7 @@ export function InterviewSetupView({
   // Stop media tracks helper
   const stopTracks = (stream: MediaStream | null) => {
     if (!stream) return;
-    stream.getTracks().forEach((track) => track.stop());
+    stream.getTracks().forEach((t) => t.stop());
   };
 
   // Request camera and microphone access
@@ -69,9 +61,6 @@ export function InterviewSetupView({
           });
           setMediaStream(activeStream);
           setHasCameraPermission(true);
-          if (videoRef.current) {
-            videoRef.current.srcObject = activeStream;
-          }
         }
       } catch (err) {
         console.warn('Unable to acquire media stream during setup:', err);
@@ -106,83 +95,70 @@ export function InterviewSetupView({
     setIsMicOn(!isMicOn);
   };
 
+  // Speaker audio test beep
+  const handleTestAudio = () => {
+    setIsPlayingAudioTest(true);
+    try {
+      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(440, audioCtx.currentTime);
+      gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.5);
+    } catch (e) {
+      console.warn('AudioContext not supported or blocked:', e);
+    }
+    setTimeout(() => setIsPlayingAudioTest(false), 600);
+  };
+
   const handleStart = () => {
-    // Clean up preview stream tracks so live room can acquire clean media handle
     stopTracks(mediaStream);
     onJoinInterview({
-      difficulty: selectedDifficulty,
+      difficulty: 'Intermediate',
       isCameraEnabled: isCameraOn,
       isMicEnabled: isMicOn,
     });
   };
 
-  const difficultyLevels = [
-    {
-      id: 'Beginner' as const,
-      label: 'Beginner',
-      tag: 'Junior / Entry',
-      description: 'Fundamental syntax, core concepts, guided problem solving.',
-      time: '20 min',
-      color: 'border-emerald-500/60 bg-emerald-500/10 text-emerald-300',
-      activeRing: 'ring-2 ring-emerald-500/80 border-emerald-500',
-    },
-    {
-      id: 'Intermediate' as const,
-      label: 'Intermediate',
-      tag: 'Mid-Level',
-      description: 'Practical architectural trade-offs, concurrency, real-world edge cases.',
-      time: '35 min',
-      color: 'border-blue-500/60 bg-blue-500/10 text-blue-300',
-      activeRing: 'ring-2 ring-blue-500/80 border-blue-500',
-    },
-    {
-      id: 'Advanced' as const,
-      label: 'Advanced',
-      tag: 'Senior / Staff',
-      description: 'Distributed systems scaling, fault tolerance, microsecond latency.',
-      time: '45 min',
-      color: 'border-fuchsia-500/60 bg-fuchsia-500/10 text-fuchsia-300',
-      activeRing: 'ring-2 ring-fuchsia-500/80 border-fuchsia-500',
-    },
-  ];
-
   return (
-    <div className="min-h-screen bg-[#111111] text-neutral-100 flex flex-col font-sans overflow-y-auto">
-      {/* Top Navbar */}
-      <header className="h-16 bg-[#161616] border-b border-neutral-800 px-6 flex items-center justify-between z-20 shrink-0">
+    <div className="min-h-screen bg-[#F4F6F9] text-slate-900 flex flex-col font-sans pb-16">
+      {/* ── TOP STICKY HEADER ── */}
+      <header className="sticky top-0 z-20 bg-[#F4F6F9]/90 backdrop-blur-md px-6 lg:px-10 py-4 flex items-center justify-between gap-4 border-b border-slate-200/80">
         <div className="flex items-center gap-3">
           <button
             type="button"
             onClick={onBack}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-neutral-800 hover:bg-neutral-700 text-neutral-200 hover:text-white transition-all border border-neutral-700 cursor-pointer shadow-sm group"
+            className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-white border border-slate-200/90 text-slate-700 hover:text-slate-900 hover:border-slate-300 shadow-xs transition-all text-xs font-semibold cursor-pointer group"
           >
-            <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
+            <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform text-slate-500" />
             <span>Back to Practices</span>
           </button>
 
-          <span className="text-neutral-700 font-light">|</span>
+          <span className="text-slate-300 font-light hidden sm:inline">|</span>
 
-          <span className="text-lg font-black tracking-tight text-white flex items-center gap-2">
-            InterTrain
-          </span>
-          <span className="text-neutral-500 font-light hidden sm:inline">·</span>
-          <span className="text-xs text-neutral-400 font-medium hidden sm:inline">
-            Interview Readiness & Setup
-          </span>
+          <div className="hidden sm:flex items-center gap-2">
+            <span className="text-sm font-bold text-slate-800">InterTrain</span>
+            <span className="text-slate-400">·</span>
+            <span className="text-sm font-medium text-slate-600">{track.title}</span>
+          </div>
         </div>
 
-        {/* Section ID Badge */}
-        <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-neutral-900 border border-neutral-800 text-xs font-mono text-neutral-400 shadow-inner">
-          <span className="text-neutral-500 font-sans text-[11px]">Section ID:</span>
-          <span className="text-cyan-400 font-semibold tracking-wide">{sessionId}</span>
+        {/* Section ID pill */}
+        <div className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white border border-slate-200/90 shadow-2xs text-xs font-mono text-slate-600">
+          <span className="text-slate-400 font-sans font-medium text-[11px]">Section ID:</span>
+          <span className="text-blue-600 font-bold">{sessionId}</span>
           <button
             type="button"
             onClick={handleCopySessionId}
-            className="ml-1 text-neutral-400 hover:text-white transition-colors cursor-pointer p-0.5 rounded hover:bg-neutral-800"
+            className="p-1 rounded-md text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
             title="Copy Section ID"
           >
             {copiedSessionId ? (
-              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
             ) : (
               <Copy className="w-3.5 h-3.5" />
             )}
@@ -190,253 +166,190 @@ export function InterviewSetupView({
         </div>
       </header>
 
-      {/* Main Content Area */}
-      <main className="flex-1 max-w-7xl w-full mx-auto p-6 md:p-10 flex flex-col justify-center">
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-          {/* Left Column: Device Readiness & Camera Preview (Aiva Style) */}
-          <div className="lg:col-span-5 flex flex-col gap-4">
-            <div className="bg-[#181818] rounded-3xl border border-neutral-800 p-5 shadow-2xl relative overflow-hidden">
-              <div className="flex items-center justify-between mb-3 px-1">
-                <span className="text-xs font-bold uppercase tracking-wider text-neutral-400 flex items-center gap-2">
-                  <ShieldCheck className="w-4 h-4 text-emerald-400" />
-                  Camera & Audio Check
-                </span>
-                <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-400 text-[10px] font-semibold border border-emerald-500/30">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                  Live Preview
-                </span>
+      {/* ── MAIN CONTENT CONTAINER (Clean, Centered Device Readiness Layout) ── */}
+      <main className="px-6 lg:px-10 pt-8 max-w-4xl mx-auto w-full space-y-6">
+        {/* Device Readiness Main Card */}
+        <div className="bg-white rounded-3xl border border-slate-200/80 shadow-xs p-6 md:p-8 space-y-6">
+          {/* Header */}
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-2xl bg-blue-50 border border-blue-200/80 flex items-center justify-center text-blue-600 shadow-2xs">
+                <ShieldCheck className="w-5 h-5" />
               </div>
-
-              {/* 16:9 Video Box */}
-              <div className="aspect-video bg-[#0f0f0f] rounded-2xl border border-neutral-700/80 relative overflow-hidden flex items-center justify-center shadow-inner group">
-                {hasCameraPermission && isCameraOn ? (
-                  <video
-                    ref={(el) => {
-                      if (el && mediaStream && el.srcObject !== mediaStream) {
-                        el.srcObject = mediaStream;
-                      }
-                    }}
-                    autoPlay
-                    playsInline
-                    muted
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <div className="flex flex-col items-center justify-center p-6 text-center">
-                    <div className="w-16 h-16 rounded-full bg-neutral-800 border border-neutral-700 flex items-center justify-center text-neutral-400 mb-2 shadow-md">
-                      <VideoOff className="w-7 h-7" />
-                    </div>
-                    <p className="text-xs font-semibold text-neutral-300">
-                      Camera Stream Off
-                    </p>
-                    <p className="text-[11px] text-neutral-500 mt-0.5 max-w-[200px]">
-                      Click camera toggle below to test your webcam feed
-                    </p>
-                  </div>
-                )}
-
-                {/* You Badge overlay */}
-                <div className="absolute bottom-3 left-3 flex items-center gap-1.5 bg-black/70 backdrop-blur-xs px-2.5 py-1 rounded-lg border border-neutral-700/60">
-                  <span className={`w-2 h-2 rounded-full ${isCameraOn ? 'bg-emerald-400 animate-pulse' : 'bg-neutral-500'}`} />
-                  <span className="text-xs font-semibold text-white">You</span>
-                </div>
+              <div>
+                <h1 className="text-xl font-bold text-slate-900 leading-tight">
+                  Device Readiness Check
+                </h1>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Ensure your webcam, microphone, and audio are configured for the live interview session.
+                </p>
               </div>
+            </div>
 
-              {/* Interactive Device Controls Bar */}
-              <div className="mt-4 pt-3 border-t border-neutral-800 flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2.5">
-                  {/* Mic Toggle Button */}
-                  <button
-                    type="button"
-                    onClick={toggleMicrophone}
-                    className={`w-11 h-11 rounded-2xl flex items-center justify-center transition-all cursor-pointer shadow-md ${
-                      isMicOn
-                        ? 'bg-neutral-800 hover:bg-neutral-700 text-neutral-100 border border-neutral-700'
-                        : 'bg-red-950/80 hover:bg-red-900 text-red-300 border border-red-700/60'
-                    }`}
-                    title={isMicOn ? 'Mute Microphone' : 'Unmute Microphone'}
-                  >
-                    {isMicOn ? <Mic className="w-5 h-5" /> : <MicOff className="w-5 h-5" />}
-                  </button>
-
-                  {/* Camera Toggle Button */}
-                  <button
-                    type="button"
-                    onClick={toggleCamera}
-                    className={`w-11 h-11 rounded-2xl flex items-center justify-center transition-all cursor-pointer shadow-md ${
-                      isCameraOn
-                        ? 'bg-neutral-800 hover:bg-neutral-700 text-neutral-100 border border-neutral-700'
-                        : 'bg-red-950/80 hover:bg-red-900 text-red-300 border border-red-700/60'
-                    }`}
-                    title={isCameraOn ? 'Turn Off Camera' : 'Turn On Camera'}
-                  >
-                    {isCameraOn ? <Video className="w-5 h-5" /> : <VideoOff className="w-5 h-5" />}
-                  </button>
-                </div>
-
-                {/* Audio soundwave indicator */}
-                <div className="flex-1 bg-[#121212] px-3.5 py-2.5 rounded-2xl border border-neutral-800 flex items-center justify-between">
-                  <span className="text-[11px] text-neutral-400 font-medium">
-                    {isMicOn ? 'Mic Audio Active' : 'Mic Muted'}
-                  </span>
-                  {isMicOn ? (
-                    <div className="flex items-center gap-1">
-                      <span className="w-1 h-3 bg-emerald-400 rounded-full animate-pulse" />
-                      <span className="w-1 h-5 bg-emerald-400 rounded-full animate-pulse delay-75" />
-                      <span className="w-1 h-3.5 bg-emerald-400 rounded-full animate-pulse delay-150" />
-                      <span className="w-1 h-2 bg-emerald-400 rounded-full animate-pulse delay-100" />
-                    </div>
-                  ) : (
-                    <span className="text-[10px] text-red-400 font-medium">Muted</span>
-                  )}
-                </div>
-              </div>
-
-              {/* Status checklist */}
-              <div className="mt-4 pt-3 border-t border-neutral-800/80 grid grid-cols-2 gap-2 text-xs text-neutral-400">
-                <div className="flex items-center gap-1.5">
-                  <CheckCircle2 className={`w-3.5 h-3.5 ${isCameraOn ? 'text-emerald-400' : 'text-neutral-500'}`} />
-                  <span>Camera: {isCameraOn ? 'Enabled' : 'Disabled'}</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <CheckCircle2 className={`w-3.5 h-3.5 ${isMicOn ? 'text-emerald-400' : 'text-neutral-500'}`} />
-                  <span>Mic: {isMicOn ? 'Active' : 'Muted'}</span>
-                </div>
-              </div>
+            <div className="flex items-center gap-2">
+              <span className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-bold">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                Live Camera Test
+              </span>
             </div>
           </div>
 
-          {/* Right Column: Interview Settings & Difficulty Choice */}
-          <div className="lg:col-span-7 flex flex-col gap-6">
-            {/* Header info */}
-            <div>
-              <div className="flex items-center gap-2 mb-2">
-                <span className="px-2.5 py-0.5 rounded-full bg-[#0c3e74] text-cyan-300 text-xs font-bold border border-cyan-500/30">
-                  {track.category || 'Engineering Practice'}
-                </span>
-                <span className="text-xs text-neutral-500 font-medium">· Active Interview Track</span>
+          {/* 16:9 Video Preview Screen */}
+          <div className="w-full aspect-video bg-[#0B1220] rounded-2xl border border-slate-800 relative overflow-hidden flex items-center justify-center shadow-inner group">
+            {hasCameraPermission && isCameraOn ? (
+              <video
+                ref={(el) => {
+                  if (el && mediaStream && el.srcObject !== mediaStream) {
+                    el.srcObject = mediaStream;
+                  }
+                }}
+                autoPlay
+                playsInline
+                muted
+                className="w-full h-full object-cover -scale-x-100"
+              />
+            ) : (
+              <div className="flex flex-col items-center justify-center p-8 text-center text-white">
+                <div className="w-16 h-16 rounded-full bg-slate-800/80 border border-slate-700 flex items-center justify-center text-slate-400 mb-3 shadow-md">
+                  <VideoOff className="w-8 h-8" />
+                </div>
+                <p className="text-sm font-bold text-slate-200">
+                  Camera Preview is Off
+                </p>
+                <p className="text-xs text-slate-400 mt-1 max-w-xs">
+                  Click the "Turn On Camera" button below to enable your webcam feed.
+                </p>
               </div>
-              <h1 className="text-3xl md:text-4xl font-extrabold text-white tracking-tight font-sans">
-                {track.title}
-              </h1>
-              <p className="text-sm text-neutral-400 mt-2 leading-relaxed max-w-2xl">
-                {track.description}
-              </p>
+            )}
+
+            {/* Live Status Pill Overlay */}
+            <div className="absolute bottom-4 left-4 flex items-center gap-2 bg-black/60 backdrop-blur-md px-3 py-1.5 rounded-xl border border-white/10 text-white shadow-md">
+              <span className={`w-2 h-2 rounded-full ${isCameraOn ? 'bg-emerald-400 animate-pulse' : 'bg-slate-400'}`} />
+              <span className="text-xs font-semibold">Webcam Preview</span>
             </div>
+          </div>
 
-            {/* Difficulty Level Selection */}
-            <div>
-              <div className="flex items-center justify-between mb-3">
-                <label className="text-xs font-bold uppercase tracking-wider text-neutral-300 flex items-center gap-1.5">
-                  <Zap className="w-4 h-4 text-amber-400" />
-                  Select Interview Difficulty Level
-                </label>
-                <span className="text-xs text-neutral-500">
-                  Tailors questions and rubric depth
-                </span>
+          {/* Device Control Actions */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+            {/* Camera Toggle */}
+            <button
+              type="button"
+              onClick={toggleCamera}
+              className={`p-3.5 rounded-2xl border flex items-center justify-between transition-all cursor-pointer shadow-2xs ${
+                isCameraOn
+                  ? 'bg-blue-50/50 border-blue-200 text-blue-800'
+                  : 'bg-slate-50 border-slate-200 text-slate-600'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${isCameraOn ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-600'}`}>
+                  {isCameraOn ? <Video className="w-4 h-4" /> : <VideoOff className="w-4 h-4" />}
+                </div>
+                <div className="text-left">
+                  <p className="text-xs font-bold leading-tight">Camera</p>
+                  <p className="text-[11px] text-slate-500 leading-tight">{isCameraOn ? 'Connected' : 'Disabled'}</p>
+                </div>
               </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                {difficultyLevels.map((lvl) => {
-                  const isSelected = selectedDifficulty === lvl.id;
-                  return (
-                    <button
-                      key={lvl.id}
-                      type="button"
-                      onClick={() => setSelectedDifficulty(lvl.id)}
-                      className={`p-4 rounded-2xl border text-left transition-all cursor-pointer relative flex flex-col justify-between ${
-                        isSelected
-                          ? `${lvl.activeRing} bg-[#1f1f1f] shadow-lg`
-                          : 'border-neutral-800 bg-[#161616] hover:bg-[#1a1a1a] hover:border-neutral-700'
-                      }`}
-                    >
-                      {/* Check indicator if selected */}
-                      {isSelected && (
-                        <div className="absolute top-3 right-3 w-5 h-5 rounded-full bg-blue-500 flex items-center justify-center text-white">
-                          <CheckCircle2 className="w-3.5 h-3.5" />
-                        </div>
-                      )}
-
-                      <div>
-                        <div className="flex items-center gap-1.5 mb-1">
-                          <span className="text-sm font-bold text-white">{lvl.label}</span>
-                        </div>
-                        <span className="text-[10px] text-neutral-400 font-medium block mb-2">
-                          {lvl.tag}
-                        </span>
-                        <p className="text-xs text-neutral-300 leading-snug">
-                          {lvl.description}
-                        </p>
-                      </div>
-
-                      <div className="mt-4 pt-2 border-t border-neutral-800/80 flex items-center justify-between text-[11px] text-neutral-400">
-                        <span>Duration</span>
-                        <span className="font-mono text-neutral-200 font-semibold">{lvl.time}</span>
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-
-            {/* 3 AI Services Preview Panel */}
-            <div className="bg-[#161616] p-4 rounded-2xl border border-neutral-800">
-              <span className="text-xs font-bold uppercase tracking-wider text-neutral-400 block mb-3">
-                AI Interviewer Panel (3 Services)
+              <span className={`text-xs font-bold ${isCameraOn ? 'text-blue-600' : 'text-slate-400'}`}>
+                {isCameraOn ? 'Active' : 'Off'}
               </span>
-              <div className="grid grid-cols-3 gap-3">
-                <div className="p-2.5 rounded-xl bg-neutral-900 border border-neutral-800 flex items-center gap-2.5">
-                  <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-[#1a73e8] to-[#4285f4] flex items-center justify-center text-white shrink-0">
-                    <Sparkles className="w-3.5 h-3.5" />
-                  </div>
-                  <div className="min-w-0">
-                    <span className="text-xs font-bold text-white block truncate">Gemini 1.5 Pro</span>
-                    <span className="text-[10px] text-neutral-400 block truncate">Lead Evaluator</span>
-                  </div>
-                </div>
+            </button>
 
-                <div className="p-2.5 rounded-xl bg-neutral-900 border border-neutral-800 flex items-center gap-2.5">
-                  <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-[#c2410c] to-[#ea580c] flex items-center justify-center text-white font-black text-xs shrink-0">
-                    C
-                  </div>
-                  <div className="min-w-0">
-                    <span className="text-xs font-bold text-white block truncate">Claude 3.5</span>
-                    <span className="text-[10px] text-neutral-400 block truncate">Architecture</span>
-                  </div>
+            {/* Microphone Toggle */}
+            <button
+              type="button"
+              onClick={toggleMicrophone}
+              className={`p-3.5 rounded-2xl border flex items-center justify-between transition-all cursor-pointer shadow-2xs ${
+                isMicOn
+                  ? 'bg-emerald-50/50 border-emerald-200 text-emerald-800'
+                  : 'bg-slate-50 border-slate-200 text-slate-600'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${isMicOn ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-600'}`}>
+                  {isMicOn ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4" />}
                 </div>
-
-                <div className="p-2.5 rounded-xl bg-neutral-900 border border-neutral-800 flex items-center gap-2.5">
-                  <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-[#059669] to-[#10b981] flex items-center justify-center text-white shrink-0">
-                    <Bot className="w-3.5 h-3.5" />
-                  </div>
-                  <div className="min-w-0">
-                    <span className="text-xs font-bold text-white block truncate">GPT-4o Omni</span>
-                    <span className="text-[10px] text-neutral-400 block truncate">Algorithms</span>
-                  </div>
+                <div className="text-left">
+                  <p className="text-xs font-bold leading-tight">Microphone</p>
+                  <p className="text-[11px] text-slate-500 leading-tight">{isMicOn ? 'Live Audio' : 'Muted'}</p>
                 </div>
               </div>
-            </div>
 
-            {/* Primary Action Buttons */}
-            <div className="pt-2 flex flex-col sm:flex-row items-center gap-3">
-              <button
-                id="join-interview-btn"
-                type="button"
-                onClick={handleStart}
-                className="w-full sm:flex-1 py-4 px-8 rounded-2xl bg-[#0c3e74] hover:bg-[#0a3563] active:scale-98 text-white font-bold text-base shadow-xl hover:shadow-blue-500/20 border border-cyan-500/40 flex items-center justify-center gap-2 transition-all cursor-pointer transform hover:-translate-y-0.5"
-              >
-                <span>Join Live Interview</span>
-                <ArrowRight className="w-5 h-5" />
-              </button>
+              {/* Waveform indicator */}
+              <div className="flex items-center gap-0.5">
+                {isMicOn ? (
+                  <>
+                    <span className="w-1 h-2.5 bg-emerald-500 rounded-full animate-pulse" />
+                    <span className="w-1 h-4 bg-emerald-500 rounded-full animate-pulse delay-75" />
+                    <span className="w-1 h-2.5 bg-emerald-500 rounded-full animate-pulse delay-150" />
+                  </>
+                ) : (
+                  <span className="text-[11px] text-slate-400 font-semibold">Off</span>
+                )}
+              </div>
+            </button>
 
-              <button
-                type="button"
-                onClick={onBack}
-                className="w-full sm:w-auto py-4 px-6 rounded-2xl bg-neutral-800 hover:bg-neutral-700 text-neutral-300 hover:text-white font-semibold text-sm border border-neutral-700 transition-colors cursor-pointer"
-              >
-                Cancel
-              </button>
-            </div>
+            {/* Speaker Sound Test */}
+            <button
+              type="button"
+              onClick={handleTestAudio}
+              className={`p-3.5 rounded-2xl border flex items-center justify-between transition-all cursor-pointer shadow-2xs ${
+                isPlayingAudioTest
+                  ? 'bg-blue-50/50 border-blue-200 text-blue-800'
+                  : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100'
+              }`}
+            >
+              <div className="flex items-center gap-2.5">
+                <div className={`w-8 h-8 rounded-xl flex items-center justify-center ${isPlayingAudioTest ? 'bg-blue-600 text-white' : 'bg-slate-200 text-slate-600'}`}>
+                  <Volume2 className="w-4 h-4" />
+                </div>
+                <div className="text-left">
+                  <p className="text-xs font-bold leading-tight">Speaker Check</p>
+                  <p className="text-[11px] text-slate-500 leading-tight">Test Audio</p>
+                </div>
+              </div>
+              <span className="text-xs font-bold text-blue-600">
+                {isPlayingAudioTest ? 'Playing...' : 'Test'}
+              </span>
+            </button>
+          </div>
+
+          {/* Device Checklist Summary */}
+          <div className="p-4 rounded-2xl bg-slate-50 border border-slate-200/80 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-600">
+            <span className="flex items-center gap-2">
+              <CheckCircle2 className={`w-4 h-4 ${isCameraOn ? 'text-emerald-600' : 'text-slate-400'}`} />
+              <span>Camera: {isCameraOn ? 'Webcam Ready' : 'Turned Off'}</span>
+            </span>
+            <span className="text-slate-300 hidden sm:inline">·</span>
+            <span className="flex items-center gap-2">
+              <CheckCircle2 className={`w-4 h-4 ${isMicOn ? 'text-emerald-600' : 'text-slate-400'}`} />
+              <span>Microphone: {isMicOn ? 'Live Stream' : 'Muted'}</span>
+            </span>
+            <span className="text-slate-300 hidden sm:inline">·</span>
+            <span className="flex items-center gap-2">
+              <Clock className="w-4 h-4 text-blue-600" />
+              <span>Est. Duration: ~25 mins</span>
+            </span>
+          </div>
+
+          {/* Action Row */}
+          <div className="pt-2 flex items-center justify-between">
+            <button
+              type="button"
+              onClick={onBack}
+              className="px-5 py-3 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-all cursor-pointer"
+            >
+              Cancel
+            </button>
+
+            <button
+              type="button"
+              onClick={handleStart}
+              className="px-8 py-3.5 rounded-2xl bg-blue-600 hover:bg-blue-700 active:scale-98 text-white text-sm font-bold shadow-lg shadow-blue-500/25 flex items-center gap-2 transition-all cursor-pointer"
+            >
+              <span>Join Live Interview Room</span>
+              <ArrowRight className="w-4 h-4" />
+            </button>
           </div>
         </div>
       </main>

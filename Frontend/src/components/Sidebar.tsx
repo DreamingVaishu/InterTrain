@@ -1,18 +1,15 @@
-import React from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   Home,
   BookOpen,
   BarChart3,
-  Video,
-  Cloud,
-  Database,
-  Code2,
-  Palette,
+  History,
   Settings,
   HelpCircle,
-  ChevronRight,
   LogOut,
   X,
+  ChevronRight,
+  Sparkles,
 } from 'lucide-react';
 import { NavTab, HistoryFolder } from '../types';
 
@@ -31,6 +28,10 @@ interface SidebarProps {
   onLogout?: () => void;
 }
 
+const HEADER_HEIGHT = 76;
+const SIDEBAR_WIDTH = 80;
+const ACTIVE_MERGE_BG = '#121C33'; // Seamless dark navy matching InterTrain palette
+
 export function Sidebar({
   currentTab,
   onSelectTab,
@@ -41,47 +42,325 @@ export function Sidebar({
   currentUser,
   onLogout,
 }: SidebarProps) {
-  const mainNavItems = [
-    { id: 'home' as NavTab, label: 'Home', icon: Home },
-    { id: 'practices' as NavTab, label: 'Practice', icon: BookOpen },
-    { id: 'analytics' as NavTab, label: 'Analytics', icon: BarChart3 },
-    { id: 'practices' as NavTab, label: 'Mock Interviews', icon: Video, customFilter: 'mock' },
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [showProfileCard, setShowProfileCard] = useState(false);
+  const [iconOffsets, setIconOffsets] = useState<Record<string, number>>({});
+  const navRef = useRef<HTMLElement>(null);
+  const iconRefs = useRef<Record<string, HTMLDivElement | null>>({});
+
+  // Navigation Items with Sub-items for Aiva-style Flyout
+  const navItems = [
+    {
+      id: 'home',
+      label: 'Home',
+      icon: Home,
+      tab: 'home' as NavTab,
+      subItems: [
+        { id: 'sub-home-dash', label: 'Dashboard', tab: 'home' as NavTab },
+        { id: 'sub-home-practice', label: 'Practice Sets', tab: 'practices' as NavTab },
+        { id: 'sub-home-analytics', label: 'Analytics', tab: 'analytics' as NavTab },
+      ],
+    },
+    {
+      id: 'practices',
+      label: 'Practice',
+      icon: BookOpen,
+      tab: 'practices' as NavTab,
+      subItems: [
+        { id: 'sub-all-tracks', label: 'All Practice Tracks', tab: 'practices' as NavTab },
+        { id: 'sub-performance', label: 'Review Metrics', tab: 'analytics' as NavTab },
+      ],
+    },
+    {
+      id: 'analytics',
+      label: 'Analytics',
+      icon: BarChart3,
+      tab: 'analytics' as NavTab,
+    },
+    {
+      id: 'history',
+      label: 'History',
+      icon: History,
+      tab: 'history' as NavTab,
+    },
   ];
 
-  const toolsItems = [
-    { id: 'devops', label: 'DevOps', icon: Cloud },
-    { id: 'data-manager', label: 'Data Manager', icon: Database },
-    { id: 'backend', label: 'Backend', icon: Code2 },
-    { id: 'ui-ux', label: 'UI/UX', icon: Palette },
-  ];
+  // Measure icon vertical offsets for flyout alignment
+  const measureOffsets = useCallback(() => {
+    if (!navRef.current) return;
+    const navRect = navRef.current.getBoundingClientRect();
+    const offsets: Record<string, number> = {};
+    for (const [id, el] of Object.entries(iconRefs.current)) {
+      const elNode = el as HTMLElement | null;
+      if (elNode) {
+        const elRect = elNode.getBoundingClientRect();
+        offsets[id] = elRect.top - navRect.top;
+      }
+    }
+    setIconOffsets(offsets);
+  }, []);
 
-  return (
-    <>
-      {/* Mobile Backdrop */}
-      {isMobileOpen && (
+  useEffect(() => {
+    measureOffsets();
+    window.addEventListener('resize', measureOffsets);
+    return () => window.removeEventListener('resize', measureOffsets);
+  }, [measureOffsets]);
+
+  const hoveredItem = navItems.find((i) => i.id === hoveredId);
+  const hasSubItems = hoveredItem && hoveredItem.subItems && hoveredItem.subItems.length > 0;
+  const displayId = hasSubItems ? hoveredId : null;
+  const displaySubItems = hasSubItems ? hoveredItem?.subItems : null;
+  const panelTop = displayId ? iconOffsets[displayId] ?? 0 : 0;
+
+  // Active item logic
+  const isItemActive = (id: string) => {
+    if (id === 'home' && currentTab === 'home') return true;
+    if (id === 'practices' && (currentTab === 'practices' || currentTab === 'best-practices')) return true;
+    if (id === 'analytics' && currentTab === 'analytics') return true;
+    if (id === 'history' && (currentTab === 'history' || currentTab === 'review')) return true;
+    return false;
+  };
+
+  /* ── Desktop Aiva-Style Rail ────────────────────────────────────────── */
+  const desktopSidebar = (
+    <div
+      className="fixed left-0 top-0 bottom-0 z-40 hidden lg:flex"
+      onMouseLeave={() => {
+        setHoveredId(null);
+        setShowProfileCard(false);
+      }}
+    >
+      {/* Vertical Icon Rail (80px wide) */}
+      <div
+        className="relative z-20 h-full flex flex-col justify-between items-center shadow-2xl border-r border-slate-800/90"
+        style={{
+          width: SIDEBAR_WIDTH,
+          background: 'linear-gradient(180deg, #0B0F19 0%, #0E1424 50%, #0B0F19 100%)',
+        }}
+      >
+        {/* Top Logo Section matching Aiva */}
+        <div className="w-full flex flex-col items-center">
+          <button
+            type="button"
+            onClick={() => onSelectTab('home')}
+            className="flex-shrink-0 flex items-center justify-center w-full group cursor-pointer focus:outline-hidden"
+            style={{ height: HEADER_HEIGHT }}
+            title="InterTrain Home"
+          >
+            <div className="w-[50px] h-[50px] rounded-2xl bg-gradient-to-tr from-blue-600/30 via-blue-500/20 to-transparent border border-blue-500/40 flex items-center justify-center text-white shadow-lg group-hover:scale-105 group-hover:border-blue-400 transition-all">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="w-6 h-6 text-white"
+              >
+                <path d="M22 10v6M2 10l10-5 10 5-10 5z" />
+                <path d="M6 12v5c3 3 9 3 12 0v-5" />
+              </svg>
+            </div>
+          </button>
+
+          {/* Navigation Items (Icon on top, label below) */}
+          <nav ref={navRef} className="flex flex-col items-center gap-4 w-full pt-2">
+            {navItems.map((item) => {
+              const Icon = item.icon;
+              const active = isItemActive(item.id);
+              const isMerged = displayId === item.id;
+
+              return (
+                <div
+                  key={item.id}
+                  ref={(el) => {
+                    iconRefs.current[item.id] = el;
+                  }}
+                  className="relative w-full flex justify-end"
+                  onMouseEnter={() => setHoveredId(item.id)}
+                >
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (item.tab) {
+                        onSelectTab(item.tab);
+                      }
+                    }}
+                    className={`
+                      flex flex-col items-center justify-center
+                      w-[72px] py-2.5
+                      text-[11px] font-medium tracking-wide
+                      transition-all duration-200 cursor-pointer
+                      ${isMerged ? 'rounded-l-2xl rounded-r-none' : 'rounded-xl w-[64px] mr-2'}
+                      ${
+                        isMerged
+                          ? 'text-white shadow-[-4px_0_12px_rgba(0,0,0,0.35)]'
+                          : active
+                          ? 'bg-blue-600/25 text-white font-semibold shadow-inner'
+                          : 'text-slate-400 hover:text-white hover:bg-white/5'
+                      }
+                    `}
+                    style={{
+                      backgroundColor: isMerged ? ACTIVE_MERGE_BG : undefined,
+                      paddingRight: isMerged ? '8px' : '0',
+                    }}
+                  >
+                    <Icon className={`w-5 h-5 mb-1 ${active || isMerged ? 'text-white' : 'text-slate-400'}`} />
+                    <span className="leading-none text-[10px] select-none">{item.label}</span>
+                  </button>
+
+                  {/* Left edge active indicator bar (Aiva style) */}
+                  {active && !isMerged && (
+                    <div className="absolute -left-0.5 top-1/2 -translate-y-1/2 w-[3.5px] h-7 rounded-r-full bg-cyan-400 shadow-[0_0_10px_rgba(34,211,238,0.7)] transition-all" />
+                  )}
+                </div>
+              );
+            })}
+          </nav>
+        </div>
+
+        {/* Bottom Area: Settings & User Profile Avatar */}
+        <div className="w-full flex flex-col items-center gap-3 pb-5 pt-3 border-t border-slate-800/80">
+          {/* Settings Button */}
+          <button
+            type="button"
+            onClick={onOpenSettings}
+            className="w-11 h-11 rounded-xl flex items-center justify-center text-slate-400 hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
+            title="Open Settings"
+          >
+            <Settings className="w-5 h-5" />
+          </button>
+
+          {/* User Profile Avatar Pill */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setShowProfileCard(!showProfileCard)}
+              className="w-11 h-11 rounded-2xl bg-gradient-to-tr from-[#0c3e74] to-[#1e40af] border border-blue-400/40 flex items-center justify-center text-xs font-bold text-white shadow-md hover:scale-105 transition-all cursor-pointer overflow-hidden"
+              title={currentUser?.name || 'User Profile'}
+            >
+              {currentUser?.name
+                ? currentUser.name
+                    .split(' ')
+                    .map((n) => n[0])
+                    .join('')
+                    .toUpperCase()
+                    .slice(0, 2)
+                : 'BB'}
+            </button>
+
+            {/* Profile Popover on hover or click */}
+            {showProfileCard && (
+              <div className="absolute left-16 bottom-0 w-64 bg-[#121C33] border border-slate-700/80 rounded-2xl p-4 shadow-2xl z-50 text-left animate-in fade-in slide-in-from-left-2 duration-150">
+                <div className="flex items-center gap-3 pb-3 border-b border-slate-800">
+                  <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-xs font-bold text-white shadow-sm shrink-0">
+                    {currentUser?.name ? currentUser.name.charAt(0).toUpperCase() : 'B'}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-white truncate">
+                      {currentUser?.name || 'Billu Badmash'}
+                    </p>
+                    <p className="text-[11px] text-slate-400 truncate">
+                      {currentUser?.email || 'student@intertrain.edu'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-3 flex items-center justify-between">
+                  <span className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">
+                    Candidate Mode
+                  </span>
+                  {onLogout && (
+                    <button
+                      type="button"
+                      onClick={onLogout}
+                      className="flex items-center gap-1 text-xs text-red-400 hover:text-red-300 font-medium hover:underline cursor-pointer"
+                    >
+                      <LogOut className="w-3.5 h-3.5" />
+                      <span>Sign Out</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Right Expand Flyout Panel (Aiva Contiguous Shape on Hover) ──── */}
+      {displaySubItems && (
         <div
-          onClick={onCloseMobile}
-          className="fixed inset-0 bg-black/70 z-40 lg:hidden backdrop-blur-xs transition-opacity"
-        />
+          className="absolute z-10 overflow-hidden rounded-r-2xl rounded-bl-2xl shadow-2xl border-y border-r border-slate-700/60 transition-all animate-in fade-in slide-in-from-left-2 duration-150"
+          style={{
+            left: SIDEBAR_WIDTH - 1,
+            top: HEADER_HEIGHT + 14 + panelTop,
+            minWidth: 175,
+            backgroundColor: ACTIVE_MERGE_BG,
+          }}
+        >
+          <div className="flex flex-col gap-1 p-2.5">
+            {displaySubItems.map((sub) => {
+              const isSubActive =
+                sub.tab ? currentTab === sub.tab : false;
+
+              return (
+                <button
+                  key={sub.id}
+                  type="button"
+                  onClick={() => {
+                    if (sub.tab) {
+                      onSelectTab(sub.tab);
+                    } else if (sub.folderId) {
+                      onSelectFolder(sub.folderId);
+                    }
+                    setHoveredId(null);
+                  }}
+                  className={`
+                    w-full text-left px-3.5 py-2 rounded-xl
+                    text-xs font-medium tracking-wide flex items-center justify-between
+                    transition-all duration-150 cursor-pointer
+                    ${
+                      isSubActive
+                        ? 'bg-blue-600 text-white font-semibold shadow-xs'
+                        : 'text-slate-300 hover:bg-white/10 hover:text-white'
+                    }
+                  `}
+                >
+                  <div className="flex items-center gap-2">
+                    {'icon' in sub && sub.icon && (
+                      <sub.icon className="w-3.5 h-3.5 text-slate-400" />
+                    )}
+                    <span>{sub.label}</span>
+                  </div>
+                  <ChevronRight className="w-3 h-3 text-slate-500 opacity-60" />
+                </button>
+              );
+            })}
+          </div>
+        </div>
       )}
+    </div>
+  );
+
+  /* ── Mobile Drawer (Slide in for small screens) ─────────────────────── */
+  const mobileDrawer = isMobileOpen && (
+    <>
+      <div
+        onClick={onCloseMobile}
+        className="fixed inset-0 z-40 bg-black/70 backdrop-blur-xs lg:hidden transition-opacity"
+      />
 
       <aside
-        className={`fixed top-0 bottom-0 left-0 z-50 w-64 bg-[#0B0F19] text-slate-300 flex flex-col justify-between border-r border-slate-800/80 transition-transform duration-300 ease-in-out lg:translate-x-0 ${
-          isMobileOpen ? 'translate-x-0' : '-translate-x-full'
-        }`}
+        className="fixed left-0 top-0 bottom-0 z-50 w-72 shadow-2xl lg:hidden flex flex-col justify-between border-r border-slate-800"
+        style={{
+          background: 'linear-gradient(180deg, #0B0F19 0%, #0E1424 50%, #0B0F19 100%)',
+        }}
       >
-        <div className="flex flex-col h-full overflow-y-auto px-4 py-5 scrollbar-thin scrollbar-thumb-slate-800">
-          {/* Top Brand Header */}
-          <div className="flex items-center justify-between mb-7 px-2">
-            <button
-              onClick={() => {
-                onSelectTab('home');
-                if (onCloseMobile) onCloseMobile();
-              }}
-              className="flex items-center gap-3 text-left group focus:outline-none"
-            >
-              {/* Mortarboard Brand Icon */}
-              <div className="w-8 h-8 rounded-lg bg-blue-600/20 text-blue-400 flex items-center justify-center border border-blue-500/30 group-hover:bg-blue-600/30 transition-colors">
+        <div className="h-full flex flex-col overflow-y-auto">
+          {/* Header */}
+          <div className="flex items-center justify-between px-5" style={{ height: HEADER_HEIGHT }}>
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-blue-600/30 border border-blue-500/40 flex items-center justify-center text-white">
                 <svg
                   viewBox="0 0 24 24"
                   fill="none"
@@ -95,137 +374,107 @@ export function Sidebar({
                   <path d="M6 12v5c3 3 9 3 12 0v-5" />
                 </svg>
               </div>
-              <span className="text-xl font-bold tracking-tight text-white font-sans">
-                InterTrain
-              </span>
-            </button>
+              <div>
+                <div className="text-base font-bold text-white leading-none">InterTrain</div>
+                <div className="text-[11px] text-slate-400 mt-0.5">Practice Platform</div>
+              </div>
+            </div>
 
-            {onCloseMobile && (
-              <button
-                onClick={onCloseMobile}
-                className="lg:hidden text-slate-400 hover:text-white p-1 rounded-md"
-                aria-label="Close menu"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={onCloseMobile}
+              className="w-9 h-9 rounded-xl bg-white/10 text-white flex items-center justify-center hover:bg-white/20 transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
           </div>
 
-          {/* Main Navigation Items */}
-          <nav className="space-y-1 mb-8">
-            {mainNavItems.map((item) => {
+          {/* Nav List */}
+          <nav className="px-3 py-4 flex flex-col gap-1.5">
+            {navItems.map((item) => {
               const Icon = item.icon;
-              const isActive =
-                item.customFilter === 'mock'
-                  ? false
-                  : currentTab === item.id;
+              const active = isItemActive(item.id);
 
               return (
-                <button
-                  key={item.label}
-                  onClick={() => {
-                    onSelectTab(item.id);
-                    if (onCloseMobile) onCloseMobile();
-                  }}
-                  className={`w-full flex items-center gap-3.5 px-4 py-2.5 rounded-xl text-sm font-medium transition-all ${
-                    isActive
-                      ? 'bg-blue-600 text-white shadow-sm shadow-blue-500/20 font-semibold'
-                      : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
-                  }`}
-                >
-                  <Icon className={`w-4 h-4 ${isActive ? 'text-white' : 'text-slate-400'}`} />
-                  <span>{item.label}</span>
-                </button>
+                <div key={item.id} className="flex flex-col">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (item.tab) {
+                        onSelectTab(item.tab);
+                      }
+                      if (onCloseMobile) onCloseMobile();
+                    }}
+                    className={`flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-semibold transition-colors text-left ${
+                      active ? 'bg-blue-600 text-white' : 'text-slate-300 hover:bg-white/10 hover:text-white'
+                    }`}
+                  >
+                    <Icon className="w-4 h-4" />
+                    <span>{item.label}</span>
+                  </button>
+
+                  {/* Sub-items in mobile */}
+                  {item.subItems && (
+                    <div className="pl-10 pr-2 py-1 space-y-1">
+                      {item.subItems.map((sub) => (
+                        <button
+                          key={sub.id}
+                          type="button"
+                          onClick={() => {
+                            if (sub.tab) {
+                              onSelectTab(sub.tab);
+                            } else if (sub.folderId) {
+                              onSelectFolder(sub.folderId);
+                            }
+                            if (onCloseMobile) onCloseMobile();
+                          }}
+                          className="w-full text-left px-3 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-white hover:bg-white/5 transition-colors"
+                        >
+                          {sub.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               );
             })}
           </nav>
 
-          {/* Tools Section */}
-          <div className="mb-6">
-            <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500 mb-2.5 px-3">
-              Tools
-            </h4>
-            <div className="space-y-1">
-              {toolsItems.map((tool) => {
-                const ToolIcon = tool.icon;
-                return (
-                  <button
-                    key={tool.id}
-                    onClick={() => {
-                      onSelectFolder(tool.id);
-                      if (onCloseMobile) onCloseMobile();
-                    }}
-                    className="w-full flex items-center gap-3.5 px-4 py-2 rounded-xl text-sm text-slate-400 hover:text-white hover:bg-slate-800/50 transition-all text-left"
-                  >
-                    <ToolIcon className="w-4 h-4 text-slate-400" />
-                    <span>{tool.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-
-          {/* Bottom Utility Nav: Settings & Help */}
-          <div className="mt-auto pt-4 space-y-1 border-t border-slate-800/60">
-            <button
-              onClick={onOpenSettings}
-              className="w-full flex items-center gap-3.5 px-4 py-2 rounded-xl text-sm text-slate-400 hover:text-white hover:bg-slate-800/50 transition-all text-left"
-            >
-              <Settings className="w-4 h-4 text-slate-400" />
-              <span>Settings</span>
-            </button>
-            <button
-              onClick={() => {
-                window.alert('InterTrain Help Center\n\nNeed assistance? Access documentation or practice guidelines anytime.');
-              }}
-              className="w-full flex items-center gap-3.5 px-4 py-2 rounded-xl text-sm text-slate-400 hover:text-white hover:bg-slate-800/50 transition-all text-left"
-            >
-              <HelpCircle className="w-4 h-4 text-slate-400" />
-              <span>Help</span>
-            </button>
-          </div>
-        </div>
-
-        {/* User Profile Pill at Bottom */}
-        <div className="p-3 border-t border-slate-800/80 bg-[#090D16]">
-          <div className="flex items-center justify-between p-2 rounded-xl hover:bg-slate-800/40 transition-colors group">
-            <div className="flex items-center gap-3 min-w-0">
-              {/* User Avatar Circle */}
-              <div className="w-9 h-9 rounded-full bg-gradient-to-tr from-slate-700 to-slate-600 border border-slate-600/80 flex items-center justify-center text-xs font-bold text-white shadow-sm overflow-hidden shrink-0">
-                {currentUser?.name ? (
-                  currentUser.name
-                    .split(' ')
-                    .map((n) => n[0])
-                    .join('')
-                    .toUpperCase()
-                    .slice(0, 2)
-                ) : (
-                  'BB'
-                )}
+          {/* Bottom Settings & User in Mobile */}
+          <div className="mt-auto p-4 border-t border-slate-800 flex items-center justify-between">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-xs font-bold text-white shrink-0">
+                {currentUser?.name ? currentUser.name.charAt(0).toUpperCase() : 'B'}
               </div>
               <div className="min-w-0">
-                <p className="text-sm font-medium text-white truncate leading-tight">
+                <p className="text-xs font-bold text-white truncate leading-tight">
                   {currentUser?.name || 'Billu Badmash'}
                 </p>
-                <p className="text-xs text-slate-400 truncate">Student</p>
+                <p className="text-[10px] text-slate-400 truncate">Candidate</p>
               </div>
             </div>
 
-            <div className="flex items-center gap-1">
-              {onLogout && (
-                <button
-                  onClick={onLogout}
-                  className="p-1.5 rounded-lg text-slate-400 hover:text-red-400 hover:bg-slate-800/60 transition-colors"
-                  title="Sign Out"
-                >
-                  <LogOut className="w-3.5 h-3.5" />
-                </button>
-              )}
-              <ChevronRight className="w-4 h-4 text-slate-500 group-hover:text-slate-300 transition-colors shrink-0" />
-            </div>
+            <button
+              type="button"
+              onClick={() => {
+                onOpenSettings();
+                if (onCloseMobile) onCloseMobile();
+              }}
+              className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/10"
+              title="Settings"
+            >
+              <Settings className="w-4 h-4" />
+            </button>
           </div>
         </div>
       </aside>
+    </>
+  );
+
+  return (
+    <>
+      {desktopSidebar}
+      {mobileDrawer}
     </>
   );
 }

@@ -3,9 +3,10 @@ import React from 'react';
 interface RobotAssistantProps {
   className?: string;
   size?: number;
+  withLaptop?: boolean;
 }
 
-export function RobotAssistant({ className = '', size = 260 }: RobotAssistantProps) {
+export function RobotAssistant({ className = '', size = 260, withLaptop = false }: RobotAssistantProps) {
   return (
     <div
       className={`relative flex items-center justify-center select-none ${className}`}
@@ -211,6 +212,73 @@ export function RobotAssistant({ className = '', size = 260 }: RobotAssistantPro
           <circle cx="98" cy="156" r="4.5" fill="#0284C7" opacity="0.3" filter="url(#softBlueGlow)" />
           <circle cx="222" cy="156" r="4.5" fill="#0284C7" opacity="0.3" filter="url(#softBlueGlow)" />
         </g>
+
+        {/* --- OPTIONAL LAPTOP IN FRONT OF ROBOT --- */}
+        {withLaptop && (
+          <g id="laptop-group" transform="translate(0, 20)">
+            {/* Soft shadow underneath laptop */}
+            <ellipse cx="160" cy="305" rx="100" ry="12" fill="#000000" opacity="0.2" filter="url(#softBlueGlow)" />
+
+            {/* Laptop Base / Bottom edge */}
+            <path
+              d="M70 295 L250 295 L240 305 L80 305 Z"
+              fill="#334155"
+              stroke="#475569"
+              strokeWidth="1.5"
+            />
+
+            {/* Laptop Screen Lid (Back facing viewer) */}
+            <path
+              d="M95 240 L225 240 L238 296 L82 296 Z"
+              fill="url(#visorDarkGrad)"
+              stroke="#475569"
+              strokeWidth="1.8"
+            />
+
+            {/* Subtle Metallic Highlight on Lid */}
+            <path
+              d="M100 244 L220 244 L212 254 L108 254 Z"
+              fill="#FFFFFF"
+              opacity="0.08"
+            />
+
+            {/* InterTrain Logo Badge on Laptop Lid */}
+            <g transform="translate(160, 268) scale(0.9)">
+              <rect x="-38" y="-12" width="76" height="22" rx="6" fill="#1E293B" stroke="#38BDF8" strokeWidth="1" />
+              {/* Mortarboard icon */}
+              <path
+                d="M-28 -1 L-22 -4 L-16 -1 L-22 2 Z"
+                fill="#38BDF8"
+              />
+              <path
+                d="M-26 0.5 L-26 3.5 C-24 5 -20 5 -18 3.5 L-18 0.5"
+                stroke="#38BDF8"
+                strokeWidth="1"
+                fill="none"
+              />
+              <text
+                x="-12"
+                y="3.5"
+                fill="#FFFFFF"
+                fontSize="8"
+                fontWeight="bold"
+                fontFamily="sans-serif"
+                letterSpacing="0.3"
+              >
+                InterTrain
+              </text>
+            </g>
+
+            {/* Robot Hands on the sides / typing */}
+            {/* Left Hand */}
+            <ellipse cx="78" cy="285" rx="12" ry="8" fill="#F1F5F9" stroke="#94A3B8" strokeWidth="1.5" transform="rotate(-15 78 285)" />
+            <circle cx="78" cy="285" r="4" fill="#38BDF8" opacity="0.6" />
+
+            {/* Right Hand */}
+            <ellipse cx="242" cy="285" rx="12" ry="8" fill="#F1F5F9" stroke="#94A3B8" strokeWidth="1.5" transform="rotate(15 242 285)" />
+            <circle cx="242" cy="285" r="4" fill="#38BDF8" opacity="0.6" />
+          </g>
+        )}
       </svg>
     </div>
   );

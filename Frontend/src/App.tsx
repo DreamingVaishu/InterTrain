@@ -10,6 +10,7 @@ import { LivePracticeView } from './components/LivePracticeView';
 import { InterviewSetupView } from './components/InterviewSetupView';
 import { AnalyticsView } from './components/AnalyticsView';
 import { BestPracticesView } from './components/BestPracticesView';
+import { HistoryView } from './components/HistoryView';
 import { SettingsModal } from './components/SettingsModal';
 import LoginPage, { UserAuthData } from './components/auth/LoginPage';
 import { generateSessionId, extractSessionIdFromUrl } from './utils/session';
@@ -229,6 +230,7 @@ export default function App() {
         difficulty={interviewConfig?.difficulty}
         initialCameraOn={interviewConfig?.isCameraEnabled}
         initialMicMuted={interviewConfig ? !interviewConfig.isMicEnabled : false}
+        userName={currentUser?.name || 'Billu Badmash'}
         onEndSession={handleEndLiveSession}
         onExit={() => {
           setActiveSessionId(null);
@@ -284,13 +286,19 @@ export default function App() {
           onLogout={handleLogout}
         />
 
-        {/* Main Content View with margin offset for sidebar on lg screens */}
-        <main className="flex-1 lg:ml-64 min-h-screen">
+        {/* Main Content View with margin offset for sidebar on lg screens (80px w-20 rail) */}
+        <main className="flex-1 lg:ml-20 min-h-screen">
           {currentTab === 'home' && (
             <HomeView
               folders={folders}
               onSelectFolder={handleSelectFolder}
               onStartPractice={() => setCurrentTab('practices')}
+              onStartMockInterview={() => {
+                const targetTrack =
+                  PRACTICE_TRACKS.find((t) => t.title.toLowerCase().includes('backend')) ||
+                  PRACTICE_TRACKS[0];
+                handleStartPracticeTrack(targetTrack);
+              }}
               onViewProgress={() => setCurrentTab('analytics')}
               userName={currentUser?.name}
             />
@@ -300,6 +308,8 @@ export default function App() {
             <PracticesView
               tracks={PRACTICE_TRACKS}
               onSelectTrack={handleStartPracticeTrack}
+              onViewProgress={() => setCurrentTab('analytics')}
+              userName={currentUser?.name}
             />
           )}
 
@@ -315,6 +325,14 @@ export default function App() {
             <AnalyticsView
               folders={folders}
               onSelectFolder={handleSelectFolder}
+            />
+          )}
+
+          {currentTab === 'history' && (
+            <HistoryView
+              folders={folders}
+              onSelectFolder={handleSelectFolder}
+              onStartPractice={() => setCurrentTab('practices')}
             />
           )}
 

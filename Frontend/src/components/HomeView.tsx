@@ -27,6 +27,7 @@ interface HomeViewProps {
   folders: HistoryFolder[];
   onSelectFolder: (folderId: string) => void;
   onStartPractice: () => void;
+  onStartMockInterview?: () => void;
   onViewProgress?: () => void;
   userName?: string;
 }
@@ -35,6 +36,7 @@ export function HomeView({
   folders,
   onSelectFolder,
   onStartPractice,
+  onStartMockInterview,
   onViewProgress,
   userName,
 }: HomeViewProps) {
@@ -157,6 +159,7 @@ export function HomeView({
 
           <div className="relative z-10 flex flex-col lg:flex-row items-center justify-between gap-8">
             {/* Left Welcome Copy & CTAs */}
+            {/* Left Welcome Copy */}
             <div className="max-w-xl text-left">
               <p className="text-slate-500 font-medium text-base mb-1">
                 Welcome back!
@@ -165,30 +168,9 @@ export function HomeView({
                 <span>{displayName}</span>
                 <span className="inline-block animate-bounce text-3xl">👋</span>
               </h1>
-              <p className="text-slate-600 text-base md:text-lg mt-3 mb-7 font-normal">
+              <p className="text-slate-600 text-base md:text-lg mt-3 mb-2 font-normal">
                 Keep practicing. You're getting better every day!
               </p>
-
-              {/* Action Buttons */}
-              <div className="flex flex-wrap items-center gap-3.5">
-                <button
-                  id="start-practice-btn"
-                  onClick={onStartPractice}
-                  className="inline-flex items-center gap-2 px-6 py-3 rounded-2xl bg-blue-600 hover:bg-blue-700 active:scale-98 text-white font-bold text-sm md:text-base shadow-md shadow-blue-500/25 transition-all cursor-pointer"
-                >
-                  <Plus className="w-5 h-5 stroke-[2.5]" />
-                  <span>Start Practice</span>
-                </button>
-
-                <button
-                  id="view-progress-btn"
-                  onClick={onViewProgress || onStartPractice}
-                  className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-slate-50 hover:bg-slate-100 active:scale-98 border border-slate-200 text-slate-700 font-semibold text-sm md:text-base transition-all cursor-pointer shadow-xs"
-                >
-                  <BarChart2 className="w-4 h-4 text-blue-600" />
-                  <span>View Progress</span>
-                </button>
-              </div>
             </div>
 
             {/* Center Robot Mascot Illustration */}
@@ -250,8 +232,39 @@ export function HomeView({
                   {/* Subtle Background Shape */}
                   <div className="absolute -right-6 -bottom-6 w-28 h-28 rounded-full bg-white/5 blur-xl group-hover:bg-blue-400/10 transition-all pointer-events-none" />
 
+                  {/* Subtle Background Watermark Graphic matching screenshot */}
+                  <div className="absolute right-2 top-8 w-24 h-24 pointer-events-none opacity-10 group-hover:opacity-20 transition-opacity">
+                    {track.id === 'devops' && (
+                      <svg viewBox="0 0 100 60" fill="none" stroke="currentColor" strokeWidth="6" className="w-full h-full text-blue-300">
+                        <path d="M30 30 C30 15, 10 15, 10 30 C10 45, 30 45, 50 30 C70 15, 90 15, 90 30 C90 45, 70 45, 50 30" />
+                      </svg>
+                    )}
+                    {track.id === 'data-manager' && (
+                      <svg viewBox="0 0 80 80" fill="none" stroke="currentColor" strokeWidth="5" className="w-full h-full text-blue-300">
+                        <ellipse cx="40" cy="20" rx="30" ry="10" />
+                        <path d="M10 20 v20 c0 5.5 13.4 10 30 10 s30 -4.5 30 -10 v-20" />
+                        <path d="M10 40 v20 c0 5.5 13.4 10 30 10 s30 -4.5 30 -10 v-20" />
+                      </svg>
+                    )}
+                    {track.id === 'backend' && (
+                      <svg viewBox="0 0 80 80" fill="none" stroke="currentColor" strokeWidth="5" className="w-full h-full text-blue-300">
+                        <path d="M25 25 L10 40 L25 55" strokeLinecap="round" strokeLinejoin="round" />
+                        <path d="M55 25 L70 40 L55 55" strokeLinecap="round" strokeLinejoin="round" />
+                        <line x1="45" y1="20" x2="35" y2="60" strokeLinecap="round" />
+                      </svg>
+                    )}
+                    {track.id === 'ui-ux' && (
+                      <svg viewBox="0 0 80 80" fill="none" stroke="currentColor" strokeWidth="5" className="w-full h-full text-blue-300">
+                        <rect x="10" y="15" width="60" height="50" rx="8" />
+                        <line x1="10" y1="30" x2="70" y2="30" />
+                        <circle cx="20" cy="22.5" r="2.5" fill="currentColor" />
+                        <circle cx="28" cy="22.5" r="2.5" fill="currentColor" />
+                      </svg>
+                    )}
+                  </div>
+
                   {/* Top Row: Icon & Graphic Accent */}
-                  <div className="flex items-start justify-between">
+                  <div className="relative z-10 flex items-start justify-between">
                     <div className="w-10 h-10 rounded-xl bg-white/10 backdrop-blur-xs flex items-center justify-center border border-white/15">
                       <TrackIcon className={`w-5 h-5 ${track.iconGlow}`} />
                     </div>
@@ -263,26 +276,25 @@ export function HomeView({
                   </div>
 
                   {/* Middle Copy */}
-                  <div className="mt-4">
+                  <div className="relative z-10 mt-4">
                     <h3 className="text-lg font-bold text-white tracking-tight group-hover:text-blue-200 transition-colors">
                       {track.title}
                     </h3>
-                    <p className="text-xs text-slate-300 mt-1 line-clamp-2 leading-relaxed font-normal">
+                    <p className="text-xs text-slate-400 mt-1 line-clamp-1">
                       {track.description}
                     </p>
                   </div>
 
-                  {/* Bottom Row: Topic pill and circular arrow button */}
-                  <div className="flex items-center justify-between mt-auto pt-3">
-                    <span className={`text-[11px] px-2.5 py-0.5 rounded-full font-medium ${track.badgeBg}`}>
+                  {/* Bottom Row */}
+                  <div className="relative z-10 mt-4 pt-3 border-t border-white/10 flex items-center justify-between text-xs">
+                    <span className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold ${track.badgeBg}`}>
                       {track.topicsCount}
                     </span>
-
                     <button
-                      className={`w-8 h-8 rounded-full flex items-center justify-center shadow-xs group-hover:scale-110 transition-transform ${track.arrowBg}`}
-                      aria-label={`Open ${track.title}`}
+                      className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all ${track.arrowBg} shadow-xs`}
+                      aria-label={`Explore ${track.title}`}
                     >
-                      <ArrowRight className="w-4 h-4 stroke-[2.5]" />
+                      <ArrowRight className="w-4 h-4" />
                     </button>
                   </div>
                 </div>
@@ -291,114 +303,18 @@ export function HomeView({
           </div>
         </section>
 
-        {/* ── 3. MIDDLE SECTION: PROGRESS & UPCOMING INTERVIEW ── */}
-        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
-          {/* Left Card: Your Progress (5 Cols on large) */}
-          <div className="lg:col-span-6 bg-white rounded-3xl border border-slate-200/80 shadow-xs p-6 flex flex-col justify-between">
-            <div>
-              <h3 className="text-lg font-bold text-slate-900 tracking-tight">
-                Your Progress
-              </h3>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Keep going! You're making great progress.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 sm:grid-cols-12 gap-6 items-center my-6">
-              {/* Circular Gauge Gauge (68%) */}
-              <div className="sm:col-span-5 flex flex-col items-center justify-center">
-                <div className="relative w-28 h-28 flex items-center justify-center">
-                  <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
-                    {/* Background Circle */}
-                    <circle
-                      cx="50"
-                      cy="50"
-                      r="40"
-                      fill="none"
-                      stroke="#E2E8F0"
-                      strokeWidth="10"
-                    />
-                    {/* Progress Circle (68% -> circumference 251.2 -> strokeDashoffset = 251.2 * (1 - 0.68) = 80.38) */}
-                    <circle
-                      cx="50"
-                      cy="50"
-                      r="40"
-                      fill="none"
-                      stroke="#2563EB"
-                      strokeWidth="10"
-                      strokeDasharray="251.2"
-                      strokeDashoffset="80.38"
-                      strokeLinecap="round"
-                      className="transition-all duration-1000 ease-out"
-                    />
-                  </svg>
-                  {/* Center Text */}
-                  <div className="absolute inset-0 flex flex-col items-center justify-center">
-                    <span className="text-2xl font-black text-slate-900 tracking-tight">
-                      68%
-                    </span>
-                    <span className="text-[9px] font-semibold uppercase tracking-wider text-slate-400">
-                      Overall
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              {/* 4 Progress Metrics */}
-              <div className="sm:col-span-7 grid grid-cols-2 gap-3">
-                <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100">
-                  <div className="flex items-center gap-1.5 text-blue-600 mb-1">
-                    <CheckCircle2 className="w-4 h-4" />
-                    <span className="text-sm font-bold text-slate-900">8</span>
-                  </div>
-                  <p className="text-[11px] text-slate-500 font-medium">Topics Completed</p>
-                </div>
-
-                <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100">
-                  <div className="flex items-center gap-1.5 text-blue-600 mb-1">
-                    <Activity className="w-4 h-4" />
-                    <span className="text-sm font-bold text-slate-900">12</span>
-                  </div>
-                  <p className="text-[11px] text-slate-500 font-medium">Practice Sessions</p>
-                </div>
-
-                <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100">
-                  <div className="flex items-center gap-1.5 text-blue-600 mb-1">
-                    <Video className="w-4 h-4" />
-                    <span className="text-sm font-bold text-slate-900">3</span>
-                  </div>
-                  <p className="text-[11px] text-slate-500 font-medium">Mock Interviews</p>
-                </div>
-
-                <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100">
-                  <div className="flex items-center gap-1.5 text-blue-600 mb-1">
-                    <Star className="w-4 h-4 fill-blue-600 text-blue-600" />
-                    <span className="text-sm font-bold text-slate-900">4.5</span>
-                  </div>
-                  <p className="text-[11px] text-slate-500 font-medium">Average Score</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-              <span>Goal: 85% ready for tech round</span>
-              <button
-                onClick={onViewProgress}
-                className="text-blue-600 hover:text-blue-700 font-semibold"
-              >
-                Detailed Report →
-              </button>
-            </div>
-          </div>
-
-          {/* Right Card: Upcoming Mock Interview (6 Cols on large) */}
-          <div className="lg:col-span-6 bg-white rounded-3xl border border-slate-200/80 shadow-xs p-6 flex flex-col justify-between">
+        {/* ── 3. UPCOMING MOCK INTERVIEW SECTION ── */}
+        <div>
+          <div className="bg-white rounded-3xl border border-slate-200/80 shadow-xs p-6 md:p-8 flex flex-col justify-between">
             <div className="flex items-center justify-between">
               <div>
-                <h3 className="text-lg font-bold text-slate-900 tracking-tight flex items-center gap-2">
-                  <Clock className="w-4 h-4 text-blue-600" />
+                <h3 className="text-xl font-bold text-slate-900 tracking-tight flex items-center gap-2">
+                  <Clock className="w-5 h-5 text-blue-600" />
                   <span>Upcoming Mock Interview</span>
                 </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Your next scheduled technical assessment round with multi-agent evaluators
+                </p>
               </div>
               <button
                 onClick={onStartPractice}
@@ -447,7 +363,7 @@ export function HomeView({
                 {/* Join Interview Button */}
                 <div className="flex items-center gap-2 shrink-0">
                   <button
-                    onClick={onStartPractice}
+                    onClick={onStartMockInterview || onStartPractice}
                     className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs hover:shadow-md transition-all cursor-pointer"
                   >
                     Join Interview
