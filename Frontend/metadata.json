@@ -1,0 +1,11 @@
+{
+  "name": "InterTrain",
+  "description": "AI-powered mock interview and technical practice platform featuring dual-interviewer feedback, live coding sandbox, and attempt history.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
