@@ -1,4 +1,10 @@
-export type NavTab = 'home' | 'practices' | 'analytics' | 'best-practices' | 'review' | 'live-practice';
+export type NavTab = 'home' | 'practices' | 'analytics' | 'best-practices' | 'review' | 'live-practice' | 'practice-setup';
+
+export interface InterviewConfig {
+  difficulty: 'Beginner' | 'Intermediate' | 'Advanced';
+  isCameraEnabled: boolean;
+  isMicEnabled: boolean;
+}
 
 export interface QuestionResponse {
   id: string;

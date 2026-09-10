@@ -1,87 +1,560 @@
-import { Plus } from 'lucide-react';
+import React, { useState } from 'react';
+import {
+  Search,
+  Bell,
+  Plus,
+  BarChart2,
+  ArrowRight,
+  Cloud,
+  Database,
+  Code2,
+  Palette,
+  CheckCircle2,
+  Activity,
+  Video,
+  Star,
+  Clock,
+  Users,
+  MoreVertical,
+  BookOpen,
+  Info,
+  Sparkles,
+} from 'lucide-react';
 import { HistoryFolder } from '../types';
-import { FolderCard } from './FolderCard';
-import { GraduationWatermark } from './GraduationWatermark';
+import { RobotAssistant } from './RobotAssistant';
 
 interface HomeViewProps {
   folders: HistoryFolder[];
   onSelectFolder: (folderId: string) => void;
   onStartPractice: () => void;
+  onViewProgress?: () => void;
   userName?: string;
 }
 
-export function HomeView({ folders, onSelectFolder, onStartPractice, userName }: HomeViewProps) {
-  const displayName = userName || 'Billu badmash';
+export function HomeView({
+  folders,
+  onSelectFolder,
+  onStartPractice,
+  onViewProgress,
+  userName,
+}: HomeViewProps) {
+  const [searchQuery, setSearchQuery] = useState('');
+  const [hasNotifications, setHasNotifications] = useState(true);
+  const displayName = userName || 'Billu Badmash';
+
+  // Extract initials
+  const initials = displayName
+    .split(' ')
+    .map((n) => n[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2);
+
+  // Black, White & Blue combo tracks for the Explore section with uniform styling
+  const exploreTracks = [
+    {
+      id: 'devops',
+      title: 'DevOps',
+      description: 'Learn & practice modern DevOps tools',
+      topicsCount: '12+ topics',
+      icon: Cloud,
+      cardTheme: 'from-[#0B1220] via-[#111A2E] to-[#1E293B]',
+      borderTheme: 'border-slate-800/90 hover:border-blue-500/60',
+      badgeBg: 'bg-blue-500/15 text-blue-300 border border-blue-500/25',
+      arrowBg: 'bg-blue-600 text-white hover:bg-blue-500',
+      iconGlow: 'text-blue-400',
+    },
+    {
+      id: 'data-manager',
+      title: 'Data Manager',
+      description: 'Work with databases and data pipelines',
+      topicsCount: '10+ topics',
+      icon: Database,
+      cardTheme: 'from-[#0B1220] via-[#111A2E] to-[#1E293B]',
+      borderTheme: 'border-slate-800/90 hover:border-blue-500/60',
+      badgeBg: 'bg-blue-500/15 text-blue-300 border border-blue-500/25',
+      arrowBg: 'bg-blue-600 text-white hover:bg-blue-500',
+      iconGlow: 'text-blue-400',
+    },
+    {
+      id: 'backend',
+      title: 'Backend',
+      description: 'Build and test server-side applications',
+      topicsCount: '14+ topics',
+      icon: Code2,
+      cardTheme: 'from-[#0B1220] via-[#111A2E] to-[#1E293B]',
+      borderTheme: 'border-slate-800/90 hover:border-blue-500/60',
+      badgeBg: 'bg-blue-500/15 text-blue-300 border border-blue-500/25',
+      arrowBg: 'bg-blue-600 text-white hover:bg-blue-500',
+      iconGlow: 'text-blue-400',
+    },
+    {
+      id: 'ui-ux',
+      title: 'UI/UX',
+      description: 'Design intuitive user experiences',
+      topicsCount: '8+ topics',
+      icon: Palette,
+      cardTheme: 'from-[#0B1220] via-[#111A2E] to-[#1E293B]',
+      borderTheme: 'border-slate-800/90 hover:border-blue-500/60',
+      badgeBg: 'bg-blue-500/15 text-blue-300 border border-blue-500/25',
+      arrowBg: 'bg-blue-600 text-white hover:bg-blue-500',
+      iconGlow: 'text-blue-400',
+    },
+  ];
+
+  const handleTrackClick = (trackId: string) => {
+    onSelectFolder(trackId);
+  };
 
   return (
-    <div className="relative min-h-screen bg-[#DCDFE2] text-neutral-900 p-6 md:p-10 lg:p-12 flex flex-col justify-between overflow-y-auto">
-      {/* Background Watermark silhouette from screenshot */}
-      <GraduationWatermark />
-
-      <div className="relative z-10 max-w-7xl w-full">
-        {/* Top Greeting Header */}
-        <header className="mb-10">
-          <p className="text-xl md:text-2xl font-medium text-neutral-800">
-            Welcome back!
-          </p>
-          <h1 className="text-4xl md:text-5xl font-extrabold text-neutral-950 tracking-tight mt-1 font-sans">
-            {displayName}
-          </h1>
-        </header>
-
-        {/* Primary Action Button */}
-        <div className="mb-14">
-          <button
-            id="start-practice-hero-btn"
-            onClick={onStartPractice}
-            className="inline-flex items-center gap-2 px-8 py-4 rounded-2xl md:rounded-3xl bg-[#0c3e74] hover:bg-[#09325e] active:scale-98 text-white font-bold text-xl md:text-2xl shadow-lg transition-all transform hover:-translate-y-0.5 cursor-pointer"
-          >
-            <Plus className="w-6 h-6 stroke-[3]" />
-            <span>Start Practice</span>
-          </button>
+    <div className="min-h-screen bg-[#F4F6F9] text-slate-900 pb-16">
+      {/* ── TOP SEARCH & HEADER BAR ── */}
+      <header className="sticky top-0 z-20 bg-[#F4F6F9]/90 backdrop-blur-md px-6 lg:px-10 py-4 flex items-center justify-between gap-4 border-b border-slate-200/80">
+        {/* Search Input Box */}
+        <div className="relative flex-1 max-w-2xl">
+          <Search className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search for topics, tools, or practice sets..."
+            className="w-full bg-white text-slate-800 placeholder-slate-400 text-sm pl-11 pr-4 py-2.5 rounded-2xl border border-slate-200/90 shadow-xs focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition-all"
+          />
         </div>
 
-        {/* History Folders Section */}
-        <section className="mt-8">
-          <h2 className="text-xl md:text-2xl font-bold text-neutral-800 mb-6 tracking-tight">
-            History
-          </h2>
+        {/* Right Header Actions */}
+        <div className="flex items-center gap-3 shrink-0">
+          {/* Notification Bell */}
+          <button
+            onClick={() => setHasNotifications(false)}
+            className="relative p-2.5 rounded-2xl bg-white border border-slate-200/90 text-slate-600 hover:text-slate-900 hover:border-slate-300 shadow-xs transition-colors"
+            title="Notifications"
+            aria-label="Notifications"
+          >
+            <Bell className="w-4 h-4" />
+            {hasNotifications && (
+              <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-red-500 ring-2 ring-white" />
+            )}
+          </button>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 xl:gap-8">
-            {folders.map((folder) => (
-              <FolderCard
-                key={folder.id}
-                folder={folder}
-                onClick={() => onSelectFolder(folder.id)}
-              />
-            ))}
+          {/* User Avatar Circle */}
+          <button
+            onClick={onViewProgress}
+            className="w-10 h-10 rounded-2xl bg-slate-900 text-white font-bold flex items-center justify-center text-xs tracking-wider shadow-xs hover:bg-blue-600 transition-colors border border-slate-800"
+            title={displayName}
+          >
+            {initials}
+          </button>
+        </div>
+      </header>
+
+      {/* ── MAIN DASHBOARD CONTAINER ── */}
+      <main className="px-6 lg:px-10 pt-6 space-y-7 max-w-7xl mx-auto">
+        {/* ── 1. WELCOME HERO BANNER ── */}
+        <div className="relative bg-white rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden p-6 md:p-8 lg:p-10">
+          {/* Subtle tech grid background styling */}
+          <div className="absolute inset-0 bg-[radial-gradient(#e2e8f0_1px,transparent_1px)] [background-size:24px_24px] opacity-40 pointer-events-none" />
+
+          <div className="relative z-10 flex flex-col lg:flex-row items-center justify-between gap-8">
+            {/* Left Welcome Copy & CTAs */}
+            <div className="max-w-xl text-left">
+              <p className="text-slate-500 font-medium text-base mb-1">
+                Welcome back!
+              </p>
+              <h1 className="text-3xl sm:text-4xl md:text-5xl font-extrabold text-slate-900 tracking-tight flex items-center gap-3">
+                <span>{displayName}</span>
+                <span className="inline-block animate-bounce text-3xl">👋</span>
+              </h1>
+              <p className="text-slate-600 text-base md:text-lg mt-3 mb-7 font-normal">
+                Keep practicing. You're getting better every day!
+              </p>
+
+              {/* Action Buttons */}
+              <div className="flex flex-wrap items-center gap-3.5">
+                <button
+                  id="start-practice-btn"
+                  onClick={onStartPractice}
+                  className="inline-flex items-center gap-2 px-6 py-3 rounded-2xl bg-blue-600 hover:bg-blue-700 active:scale-98 text-white font-bold text-sm md:text-base shadow-md shadow-blue-500/25 transition-all cursor-pointer"
+                >
+                  <Plus className="w-5 h-5 stroke-[2.5]" />
+                  <span>Start Practice</span>
+                </button>
+
+                <button
+                  id="view-progress-btn"
+                  onClick={onViewProgress || onStartPractice}
+                  className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-slate-50 hover:bg-slate-100 active:scale-98 border border-slate-200 text-slate-700 font-semibold text-sm md:text-base transition-all cursor-pointer shadow-xs"
+                >
+                  <BarChart2 className="w-4 h-4 text-blue-600" />
+                  <span>View Progress</span>
+                </button>
+              </div>
+            </div>
+
+            {/* Center Robot Mascot Illustration */}
+            <div className="flex-shrink-0 flex items-center justify-center my-2 lg:my-0">
+              <RobotAssistant size={230} className="transform hover:scale-105 transition-transform duration-300" />
+            </div>
+
+            {/* Right Quote Card Bubble */}
+            <div className="w-full lg:w-72 bg-gradient-to-br from-slate-50 to-blue-50/50 border border-slate-200/90 rounded-2xl p-5 shadow-xs flex flex-col justify-between">
+              <div>
+                <p className="text-slate-800 font-semibold text-sm leading-relaxed italic">
+                  “Discipline today creates opportunities tomorrow.”
+                </p>
+                <p className="text-xs text-slate-500 font-medium mt-2">
+                  — InterTrain
+                </p>
+              </div>
+
+              <div className="mt-6 pt-4 border-t border-slate-200/60 flex items-center justify-between">
+                <span className="text-[11px] font-bold uppercase tracking-widest text-blue-600">
+                  Practice Perform Grow
+                </span>
+                <Sparkles className="w-3.5 h-3.5 text-blue-500" />
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* ── 2. EXPLORE TRACKS SECTION (Black, White & Blue Combo) ── */}
+        <section className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-xl font-bold text-slate-900 tracking-tight">
+                Explore
+              </h2>
+              <p className="text-xs sm:text-sm text-slate-500 mt-0.5">
+                Choose a track and start learning with AI-powered practice, resources and interviews.
+              </p>
+            </div>
+            <button
+              onClick={onStartPractice}
+              className="text-blue-600 hover:text-blue-700 font-semibold text-sm flex items-center gap-1 group transition-colors"
+            >
+              <span>View All</span>
+              <ArrowRight className="w-4 h-4 group-hover:translate-x-0.5 transition-transform" />
+            </button>
+          </div>
+
+          {/* 4 Cards in Black, White, and Blue theme */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {exploreTracks.map((track) => {
+              const TrackIcon = track.icon;
+              return (
+                <div
+                  key={track.id}
+                  onClick={() => handleTrackClick(track.id)}
+                  className={`group relative rounded-2xl bg-gradient-to-br ${track.cardTheme} border ${track.borderTheme} p-5 text-white shadow-xs hover:shadow-lg transition-all duration-300 cursor-pointer flex flex-col justify-between h-52 overflow-hidden`}
+                >
+                  {/* Subtle Background Shape */}
+                  <div className="absolute -right-6 -bottom-6 w-28 h-28 rounded-full bg-white/5 blur-xl group-hover:bg-blue-400/10 transition-all pointer-events-none" />
+
+                  {/* Top Row: Icon & Graphic Accent */}
+                  <div className="flex items-start justify-between">
+                    <div className="w-10 h-10 rounded-xl bg-white/10 backdrop-blur-xs flex items-center justify-center border border-white/15">
+                      <TrackIcon className={`w-5 h-5 ${track.iconGlow}`} />
+                    </div>
+
+                    {/* Subtle aesthetic icon / dots in background */}
+                    <div className="text-white/20 text-xs font-mono font-bold tracking-widest select-none">
+                      {track.id.toUpperCase().slice(0, 3)}
+                    </div>
+                  </div>
+
+                  {/* Middle Copy */}
+                  <div className="mt-4">
+                    <h3 className="text-lg font-bold text-white tracking-tight group-hover:text-blue-200 transition-colors">
+                      {track.title}
+                    </h3>
+                    <p className="text-xs text-slate-300 mt-1 line-clamp-2 leading-relaxed font-normal">
+                      {track.description}
+                    </p>
+                  </div>
+
+                  {/* Bottom Row: Topic pill and circular arrow button */}
+                  <div className="flex items-center justify-between mt-auto pt-3">
+                    <span className={`text-[11px] px-2.5 py-0.5 rounded-full font-medium ${track.badgeBg}`}>
+                      {track.topicsCount}
+                    </span>
+
+                    <button
+                      className={`w-8 h-8 rounded-full flex items-center justify-center shadow-xs group-hover:scale-110 transition-transform ${track.arrowBg}`}
+                      aria-label={`Open ${track.title}`}
+                    >
+                      <ArrowRight className="w-4 h-4 stroke-[2.5]" />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </section>
 
-        {/* Stats highlight ribbon */}
-        <section className="mt-14 pt-8 border-t border-neutral-300/60 grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <div className="bg-white/60 backdrop-blur-xs rounded-2xl p-4 border border-white/60">
-            <span className="text-xs font-semibold uppercase tracking-wider text-neutral-600">Total Practice Rounds</span>
-            <p className="text-2xl font-black text-[#0c3e74] mt-1">29 Sessions</p>
-          </div>
-          <div className="bg-white/60 backdrop-blur-xs rounded-2xl p-4 border border-white/60">
-            <span className="text-xs font-semibold uppercase tracking-wider text-neutral-600">Avg. Confidence</span>
-            <p className="text-2xl font-black text-neutral-900 mt-1">79%</p>
-          </div>
-          <div className="bg-white/60 backdrop-blur-xs rounded-2xl p-4 border border-white/60">
-            <span className="text-xs font-semibold uppercase tracking-wider text-neutral-600">Primary Focus</span>
-            <p className="text-2xl font-black text-neutral-900 mt-1">DevOps & AI</p>
-          </div>
-          <div className="bg-white/60 backdrop-blur-xs rounded-2xl p-4 border border-white/60">
-            <span className="text-xs font-semibold uppercase tracking-wider text-neutral-600">AI Interviewers</span>
-            <p className="text-2xl font-black text-emerald-700 mt-1">Gemini & Claude</p>
-          </div>
-        </section>
-      </div>
+        {/* ── 3. MIDDLE SECTION: PROGRESS & UPCOMING INTERVIEW ── */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+          {/* Left Card: Your Progress (5 Cols on large) */}
+          <div className="lg:col-span-6 bg-white rounded-3xl border border-slate-200/80 shadow-xs p-6 flex flex-col justify-between">
+            <div>
+              <h3 className="text-lg font-bold text-slate-900 tracking-tight">
+                Your Progress
+              </h3>
+              <p className="text-xs text-slate-500 mt-0.5">
+                Keep going! You're making great progress.
+              </p>
+            </div>
 
-      <footer className="relative z-10 pt-10 text-xs text-neutral-500 font-medium">
-        InterTrain AI Mock Interview System • Personalized for {displayName}
-      </footer>
+            <div className="grid grid-cols-1 sm:grid-cols-12 gap-6 items-center my-6">
+              {/* Circular Gauge Gauge (68%) */}
+              <div className="sm:col-span-5 flex flex-col items-center justify-center">
+                <div className="relative w-28 h-28 flex items-center justify-center">
+                  <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+                    {/* Background Circle */}
+                    <circle
+                      cx="50"
+                      cy="50"
+                      r="40"
+                      fill="none"
+                      stroke="#E2E8F0"
+                      strokeWidth="10"
+                    />
+                    {/* Progress Circle (68% -> circumference 251.2 -> strokeDashoffset = 251.2 * (1 - 0.68) = 80.38) */}
+                    <circle
+                      cx="50"
+                      cy="50"
+                      r="40"
+                      fill="none"
+                      stroke="#2563EB"
+                      strokeWidth="10"
+                      strokeDasharray="251.2"
+                      strokeDashoffset="80.38"
+                      strokeLinecap="round"
+                      className="transition-all duration-1000 ease-out"
+                    />
+                  </svg>
+                  {/* Center Text */}
+                  <div className="absolute inset-0 flex flex-col items-center justify-center">
+                    <span className="text-2xl font-black text-slate-900 tracking-tight">
+                      68%
+                    </span>
+                    <span className="text-[9px] font-semibold uppercase tracking-wider text-slate-400">
+                      Overall
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* 4 Progress Metrics */}
+              <div className="sm:col-span-7 grid grid-cols-2 gap-3">
+                <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                  <div className="flex items-center gap-1.5 text-blue-600 mb-1">
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span className="text-sm font-bold text-slate-900">8</span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 font-medium">Topics Completed</p>
+                </div>
+
+                <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                  <div className="flex items-center gap-1.5 text-blue-600 mb-1">
+                    <Activity className="w-4 h-4" />
+                    <span className="text-sm font-bold text-slate-900">12</span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 font-medium">Practice Sessions</p>
+                </div>
+
+                <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                  <div className="flex items-center gap-1.5 text-blue-600 mb-1">
+                    <Video className="w-4 h-4" />
+                    <span className="text-sm font-bold text-slate-900">3</span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 font-medium">Mock Interviews</p>
+                </div>
+
+                <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100">
+                  <div className="flex items-center gap-1.5 text-blue-600 mb-1">
+                    <Star className="w-4 h-4 fill-blue-600 text-blue-600" />
+                    <span className="text-sm font-bold text-slate-900">4.5</span>
+                  </div>
+                  <p className="text-[11px] text-slate-500 font-medium">Average Score</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-2 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+              <span>Goal: 85% ready for tech round</span>
+              <button
+                onClick={onViewProgress}
+                className="text-blue-600 hover:text-blue-700 font-semibold"
+              >
+                Detailed Report →
+              </button>
+            </div>
+          </div>
+
+          {/* Right Card: Upcoming Mock Interview (6 Cols on large) */}
+          <div className="lg:col-span-6 bg-white rounded-3xl border border-slate-200/80 shadow-xs p-6 flex flex-col justify-between">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-bold text-slate-900 tracking-tight flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-blue-600" />
+                  <span>Upcoming Mock Interview</span>
+                </h3>
+              </div>
+              <button
+                onClick={onStartPractice}
+                className="text-blue-600 hover:text-blue-700 font-semibold text-xs flex items-center gap-1"
+              >
+                <span>View All</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            {/* Inner Interview Card Box */}
+            <div className="my-4 p-4 rounded-2xl bg-slate-50/80 border border-slate-200/90 space-y-4">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  {/* Overlapping Interviewer Avatars */}
+                  <div className="flex -space-x-2 shrink-0">
+                    <div className="w-8 h-8 rounded-full bg-slate-900 border-2 border-white flex items-center justify-center text-[10px] text-blue-400 font-bold">
+                      AI 1
+                    </div>
+                    <div className="w-8 h-8 rounded-full bg-blue-600 border-2 border-white flex items-center justify-center text-[10px] text-white font-bold">
+                      AI 2
+                    </div>
+                    <div className="w-8 h-8 rounded-full bg-slate-800 border-2 border-white flex items-center justify-center text-[10px] text-sky-300 font-bold">
+                      AI 3
+                    </div>
+                  </div>
+
+                  {/* Title & Metadata */}
+                  <div className="min-w-0">
+                    <h4 className="font-bold text-slate-900 text-sm truncate">
+                      Full Stack Development
+                    </h4>
+                    <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500 mt-0.5">
+                      <span className="flex items-center gap-1">
+                        <Clock className="w-3 h-3 text-slate-400" />
+                        Today, 7:00 PM
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Users className="w-3 h-3 text-slate-400" />
+                        3 AI Interviewers
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Join Interview Button */}
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={onStartPractice}
+                    className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold shadow-xs hover:shadow-md transition-all cursor-pointer"
+                  >
+                    Join Interview
+                  </button>
+                  <button
+                    className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-200/60"
+                    aria-label="Options"
+                  >
+                    <MoreVertical className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Alert Notice Pill */}
+              <div className="p-2.5 rounded-xl bg-blue-50/80 border border-blue-100 flex items-center gap-2 text-xs text-blue-800">
+                <Info className="w-4 h-4 text-blue-600 shrink-0" />
+                <span className="font-medium">
+                  Be ready! The interview will start in 2 hours.
+                </span>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between text-xs text-slate-500 pt-2 border-t border-slate-100">
+              <span>Duration: ~45 mins</span>
+              <span className="text-slate-400">Panel: Architect & Tech Leads</span>
+            </div>
+          </div>
+        </div>
+
+        {/* ── 4. BOTTOM SECTION: RECENT ACTIVITY & MOTIVATIONAL QUOTE ── */}
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+          {/* Left: Recent Activity (7 Cols) */}
+          <div className="lg:col-span-7 bg-white rounded-3xl border border-slate-200/80 shadow-xs p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="text-lg font-bold text-slate-900 tracking-tight flex items-center gap-2">
+                <Clock className="w-4 h-4 text-slate-500" />
+                <span>Recent Activity</span>
+              </h3>
+              <button
+                onClick={onViewProgress}
+                className="text-blue-600 hover:text-blue-700 font-semibold text-xs flex items-center gap-1"
+              >
+                <span>View All</span>
+                <ArrowRight className="w-3.5 h-3.5" />
+              </button>
+            </div>
+
+            {/* List of Recent Activities */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-100 flex items-start gap-3">
+                <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 border border-blue-100">
+                  <CheckCircle2 className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-bold text-slate-900 truncate">
+                    Completed: Docker Basics
+                  </p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">2 hours ago</p>
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-100 flex items-start gap-3">
+                <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 border border-blue-100">
+                  <BookOpen className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-bold text-slate-900 truncate">
+                    Practiced: SQL Joins
+                  </p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">5 hours ago</p>
+                </div>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-slate-50 border border-slate-100 flex items-start gap-3">
+                <div className="w-8 h-8 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0 border border-blue-100">
+                  <Video className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <p className="text-xs font-bold text-slate-900 truncate">
+                    Mock: System Design
+                  </p>
+                  <p className="text-[11px] text-slate-400 mt-0.5">1 day ago</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Right: Motivational Quote Card (5 Cols) */}
+          <div className="lg:col-span-5 bg-gradient-to-br from-slate-900 to-[#0F172A] text-white rounded-3xl border border-slate-800 p-6 flex flex-col justify-between shadow-xs relative overflow-hidden">
+            <div className="absolute top-0 right-0 w-32 h-32 bg-blue-500/10 rounded-full blur-2xl pointer-events-none" />
+
+            <div className="relative z-10">
+              <span className="text-4xl font-serif text-blue-400 leading-none select-none block mb-2">
+                “
+              </span>
+              <p className="text-slate-100 font-semibold text-sm sm:text-base leading-relaxed italic">
+                A little progress each day adds up to big results.
+              </p>
+            </div>
+
+            <div className="relative z-10 pt-4 mt-2 flex items-center justify-between border-t border-slate-800/80">
+              <span className="text-xs text-slate-400 font-medium">— InterTrain</span>
+              <span className="text-[11px] text-blue-400 font-mono tracking-wider">AI TUTOR</span>
+            </div>
+          </div>
+        </div>
+      </main>
     </div>
   );
 }

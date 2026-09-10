@@ -8,21 +8,24 @@ import {
   PhoneOff,
   Code2,
   Maximize2,
-  Volume2,
   Send,
   Sparkles,
   ChevronDown,
   Terminal,
-  RotateCcw,
   CheckCircle2,
   Copy,
   ArrowLeft,
+  ArrowRight,
+  Bot,
 } from 'lucide-react';
 import { PracticeTrack, LiveNote, QuestionResponse } from '../types';
 
 interface LivePracticeViewProps {
   track: PracticeTrack;
   sessionId?: string;
+  difficulty?: 'Beginner' | 'Intermediate' | 'Advanced';
+  initialCameraOn?: boolean;
+  initialMicMuted?: boolean;
   onEndSession: (completedSession: {
     track: PracticeTrack;
     duration: string;
@@ -34,26 +37,69 @@ interface LivePracticeViewProps {
   onExit: () => void;
 }
 
+interface AIService {
+  id: string;
+  name: string;
+  company: string;
+  role: string;
+  model: string;
+  color: string;
+  ringColor: string;
+}
+
+const AI_SERVICES: AIService[] = [
+  {
+    id: 'gemini',
+    name: 'Gemini',
+    company: 'Google AI',
+    role: 'Lead Evaluator',
+    model: 'Gemini 1.5 Pro',
+    color: '#1a73e8',
+    ringColor: 'border-blue-400/90 ring-2 ring-blue-500/40 shadow-blue-500/10',
+  },
+  {
+    id: 'claude',
+    name: 'Claude',
+    company: 'Anthropic',
+    role: 'System Architect',
+    model: 'Claude 3.5 Sonnet',
+    color: '#ea580c',
+    ringColor: 'border-amber-400/90 ring-2 ring-amber-500/40 shadow-amber-500/10',
+  },
+  {
+    id: 'openai',
+    name: 'GPT-4o',
+    company: 'OpenAI',
+    role: 'Algorithms Specialist',
+    model: 'GPT-4o Omni',
+    color: '#10b981',
+    ringColor: 'border-emerald-400/90 ring-2 ring-emerald-500/40 shadow-emerald-500/10',
+  },
+];
+
 export function LivePracticeView({
   track,
   sessionId,
+  difficulty,
+  initialCameraOn = true,
+  initialMicMuted = false,
   onEndSession,
   onExit,
 }: LivePracticeViewProps) {
-  // Session layout mode: 'code' matches Screenshot 5 (Group 104), 'video' matches Screenshot 6 (Group 74)
-  const [layoutMode, setLayoutMode] = useState<'code' | 'video'>('code');
+  // Session layout mode starts in 'video' view showing user's camera view when interview starts
+  const [layoutMode, setLayoutMode] = useState<'code' | 'video'>('video');
 
   // Media streams
-  const [isMicMuted, setIsMicMuted] = useState(false);
-  const [isCameraOff, setIsCameraOff] = useState(false);
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const [isMicMuted, setIsMicMuted] = useState(initialMicMuted);
+  const [isCameraOff, setIsCameraOff] = useState(!initialCameraOn);
+  const [mediaStream, setMediaStream] = useState<MediaStream | null>(null);
   const [hasCameraPermission, setHasCameraPermission] = useState(false);
 
-  // Timer: starts at 5 minutes 12 seconds as in screenshot (312 seconds)
+  // Timer: starts at 5 minutes 12 seconds as in design (312 seconds)
   const [secondsRemaining, setSecondsRemaining] = useState(312);
   const [isTimerRunning, setIsTimerRunning] = useState(true);
 
-  // Active speaker simulation ('You' | 'Gemini' | 'Claude' | null)
+  // Active speaker simulation ('Gemini' | 'Claude' | 'GPT-4o')
   const [speakingParticipant, setSpeakingParticipant] = useState<string>('Gemini');
 
   // Code editor state
@@ -74,6 +120,7 @@ export function LivePracticeView({
     setCopiedSessionId(true);
     setTimeout(() => setCopiedSessionId(false), 2000);
   };
+
   const [userSpeechInput, setUserSpeechInput] = useState('');
   const [recordedQA, setRecordedQA] = useState<QuestionResponse[]>([]);
 
@@ -95,8 +142,8 @@ export function LivePracticeView({
     },
     {
       id: 'note-3',
-      speaker: 'System',
-      text: 'Code workspace initialized. Python 3.11 environment ready with NumPy runtime.',
+      speaker: 'GPT-4o',
+      text: 'Analyzing computational complexity: O(N^2) memory footprint and potential FlashAttention optimizations.',
       timestamp: '03:10',
       type: 'tip',
     },
@@ -112,12 +159,11 @@ export function LivePracticeView({
             video: true,
             audio: false,
           });
-          if (videoRef.current) {
-            videoRef.current.srcObject = stream;
-            setHasCameraPermission(true);
-          }
+          setMediaStream(stream);
+          setHasCameraPermission(true);
         }
-      } catch {
+      } catch (err) {
+        console.warn('Camera permission denied or unavailable:', err);
         setHasCameraPermission(false);
       }
     }
@@ -129,6 +175,23 @@ export function LivePracticeView({
       }
     };
   }, []);
+
+  // Helper to bind video element whenever mounted in either view
+  const bindVideoRef = (el: HTMLVideoElement | null) => {
+    if (el && mediaStream && el.srcObject !== mediaStream) {
+      el.srcObject = mediaStream;
+    }
+  };
+
+  // Toggle Camera
+  const handleToggleCamera = () => {
+    if (mediaStream) {
+      mediaStream.getVideoTracks().forEach((track) => {
+        track.enabled = isCameraOff;
+      });
+    }
+    setIsCameraOff(!isCameraOff);
+  };
 
   // Timer countdown
   useEffect(() => {
@@ -169,19 +232,18 @@ export function LivePracticeView({
         );
       } else {
         setCodeOutput(
-          `>>> Execution output:\nOperation completed successfully.\nMemory usage: 14.2 MB | Execution time: 42ms`
+          `>>> test suite executed\n✓ Unit tests passed: 4/4\nExecution time: 42ms\nMemory consumed: 14.8 MB`
         );
       }
 
-      // Add a note from Claude reacting to the code execution
       setLiveNotes((prev) => [
         ...prev,
         {
           id: `note-${Date.now()}`,
-          speaker: 'Claude',
-          text: 'Code executed cleanly. The attention weights correctly sum to 1.0 along the key sequence dimension.',
+          speaker: 'System',
+          text: `Code execution completed: All assertions passed for ${selectedLanguage.toUpperCase()}.`,
           timestamp: formatTimer(secondsRemaining),
-          type: 'note',
+          type: 'tip',
         },
       ]);
     }, 900);
@@ -208,15 +270,17 @@ export function LivePracticeView({
 
     // Advance question if available
     if (currentQIndex < track.questions.length - 1) {
-      setCurrentQIndex((prev) => prev + 1);
-      setSpeakingParticipant(currentQIndex % 2 === 0 ? 'Claude' : 'Gemini');
+      const nextIndex = currentQIndex + 1;
+      setCurrentQIndex(nextIndex);
+      const nextSpeaker = ['Claude', 'GPT-4o', 'Gemini'][nextIndex % 3];
+      setSpeakingParticipant(nextSpeaker);
 
       setLiveNotes((prev) => [
         ...prev,
         {
           id: `note-${Date.now()}`,
-          speaker: currentQIndex % 2 === 0 ? 'Claude' : 'Gemini',
-          text: `Follow-up question presented: "${track.questions[currentQIndex + 1]?.slice(0, 60)}..."`,
+          speaker: nextSpeaker,
+          text: `Follow-up question presented: "${track.questions[nextIndex]?.slice(0, 65)}..."`,
           timestamp: formatTimer(secondsRemaining),
           type: 'question',
         },
@@ -228,7 +292,7 @@ export function LivePracticeView({
         {
           id: `note-${Date.now()}`,
           speaker: 'Gemini',
-          text: 'All rounds completed! Ready to finalize attempt evaluation.',
+          text: 'All interview rounds completed! Ready to finalize attempt evaluation.',
           timestamp: formatTimer(secondsRemaining),
           type: 'tip',
         },
@@ -238,14 +302,13 @@ export function LivePracticeView({
 
   // End Session Handler
   const handleEnd = () => {
-    // Collect questions
-    const finalQuestions: QuestionResponse[] =
+    const finalQuestions =
       recordedQA.length > 0
         ? recordedQA
         : [
             {
               id: 'live-q1',
-              question: track.questions[0] || 'Introduce yourself and past experience',
+              question: track.questions[0] || 'Explain your technical implementation.',
               response:
                 userSpeechInput ||
                 'I implemented multi-head attention using scaled dot-product and tested numerical stability with synthetic Gaussian noise.',
@@ -301,6 +364,11 @@ export function LivePracticeView({
           <span className="text-sm font-medium text-neutral-300 truncate max-w-[150px] sm:max-w-xs md:max-w-md">
             {track.title}
           </span>
+          {difficulty && (
+            <span className="hidden sm:inline px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider bg-neutral-800 text-cyan-300 border border-neutral-700 shrink-0">
+              {difficulty}
+            </span>
+          )}
           {sessionId && (
             <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-neutral-900 border border-neutral-800 text-xs font-mono text-neutral-400 shadow-inner">
               <span className="text-neutral-500 font-sans text-[11px]">Section ID:</span>
@@ -326,17 +394,17 @@ export function LivePracticeView({
           <button
             onClick={() => setLayoutMode(layoutMode === 'code' ? 'video' : 'code')}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-neutral-800 hover:bg-neutral-700 text-neutral-300 transition-colors border border-neutral-700/50 cursor-pointer"
-            title="Toggle between Code Workspace & Full Video"
+            title="Toggle between Camera View & VS Code Workspace"
           >
             {layoutMode === 'code' ? (
               <>
-                <Maximize2 className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Video Stage View</span>
+                <Maximize2 className="w-3.5 h-3.5 text-blue-400" />
+                <span className="hidden sm:inline">Camera View</span>
               </>
             ) : (
               <>
-                <Code2 className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Code Editor View</span>
+                <Code2 className="w-3.5 h-3.5 text-cyan-400" />
+                <span className="hidden sm:inline">Open VS Code</span>
               </>
             )}
           </button>
@@ -353,127 +421,214 @@ export function LivePracticeView({
         </div>
       </header>
 
-      {/* Main Grid: Left Column (Participants) + Center Area (Editor or Video) + Right Column (Summary) */}
+      {/* Main Grid: Left Column (3 AI Services) + Center Area (Camera or VS Code Editor) + Right Column (Summary) */}
       <div className="flex-1 min-h-0 grid grid-cols-1 lg:grid-cols-12 overflow-y-auto lg:overflow-hidden">
-        {/* Left Column: Stacked Participant Boxes from Screenshot 5 */}
+        {/* Left Column: 3 AI Services (Gemini, Claude, GPT-4o) */}
         <div className="lg:col-span-2 bg-[#121212] p-2.5 flex flex-col gap-2.5 border-r border-neutral-800 min-h-0 overflow-y-auto shrink-0">
-          {/* Participant 1: "You" */}
-          <div className="relative flex-1 min-h-[90px] max-h-[170px] rounded-xl bg-[#616161] border border-neutral-700 overflow-hidden flex flex-col justify-end p-2.5 shadow-inner group">
-            {hasCameraPermission && !isCameraOff ? (
-              <video
-                ref={videoRef}
-                autoPlay
-                playsInline
-                muted
-                className="absolute inset-0 w-full h-full object-cover"
-              />
-            ) : (
-              <div className="absolute inset-0 flex flex-col items-center justify-center bg-neutral-600">
-                <div className="w-10 h-10 rounded-full bg-neutral-500/80 flex items-center justify-center text-white text-base font-bold shadow-sm">
-                  You
-                </div>
-                {isCameraOff && (
-                  <span className="text-[10px] text-neutral-300 mt-1">Camera Off</span>
-                )}
-              </div>
-            )}
-
-            {/* Speaking audio wave indicator if user active */}
-            {!isMicMuted && (
-              <div className="absolute top-2 right-2 flex items-center gap-0.5 bg-black/40 px-1.5 py-0.5 rounded-md backdrop-blur-xs">
-                <span className="w-1 h-3 bg-emerald-400 rounded-full animate-pulse" />
-                <span className="w-1 h-4 bg-emerald-400 rounded-full animate-pulse delay-75" />
-                <span className="w-1 h-2 bg-emerald-400 rounded-full animate-pulse delay-150" />
-              </div>
-            )}
-
-            {/* Label in bottom-left */}
-            <span className="relative z-10 text-xs font-semibold text-white/90 drop-shadow-md">
-              You
-            </span>
+          <div className="text-[11px] font-bold uppercase tracking-wider text-neutral-400 px-1 pt-0.5 flex items-center justify-between">
+            <span>AI Panel (3 Services)</span>
+            <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
           </div>
 
-          {/* Participant 2: "Gemini" */}
-          <div
-            className={`relative flex-1 min-h-[90px] max-h-[170px] rounded-xl bg-[#616161] border overflow-hidden flex flex-col justify-end p-2.5 transition-all ${
-              speakingParticipant === 'Gemini'
-                ? 'border-blue-400/80 ring-2 ring-blue-500/30'
-                : 'border-neutral-700'
-            }`}
-          >
-            {/* Ambient animated avatar inside Gemini tile */}
-            <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-b from-[#4a4a4a] to-[#3a3a3a]">
-              <div className="relative">
-                <div
-                  className={`w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#1a73e8] to-[#4285f4] flex items-center justify-center shadow-lg transition-transform ${
-                    speakingParticipant === 'Gemini' ? 'scale-105' : 'scale-95 opacity-85'
-                  }`}
-                >
-                  <Sparkles className="w-5 h-5 text-white" />
+          {AI_SERVICES.map((ai) => {
+            const isSpeaking = speakingParticipant === ai.name;
+            return (
+              <div
+                key={ai.id}
+                onClick={() => setSpeakingParticipant(ai.name)}
+                className={`relative flex-1 min-h-[105px] max-h-[185px] rounded-xl bg-[#1e1e1e] border overflow-hidden flex flex-col justify-between p-3 transition-all cursor-pointer shadow-md group ${
+                  isSpeaking ? ai.ringColor : 'border-neutral-800 hover:border-neutral-700'
+                }`}
+                title={`Click to focus on ${ai.name}`}
+              >
+                {/* Background Subtle Gradient */}
+                <div className="absolute inset-0 bg-gradient-to-b from-[#2a2a2a]/60 to-[#181818]/90 pointer-events-none" />
+
+                {/* Top row: Avatar + Service Name */}
+                <div className="relative z-10 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    {ai.id === 'gemini' && (
+                      <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-[#1a73e8] to-[#4285f4] flex items-center justify-center text-white shadow-sm">
+                        <Sparkles className="w-3.5 h-3.5" />
+                      </div>
+                    )}
+                    {ai.id === 'claude' && (
+                      <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-[#c2410c] to-[#ea580c] flex items-center justify-center text-white font-black text-xs shadow-sm">
+                        C
+                      </div>
+                    )}
+                    {ai.id === 'openai' && (
+                      <div className="w-7 h-7 rounded-lg bg-gradient-to-tr from-[#059669] to-[#10b981] flex items-center justify-center text-white shadow-sm">
+                        <Bot className="w-3.5 h-3.5" />
+                      </div>
+                    )}
+                    <div>
+                      <span className="text-xs font-bold text-white leading-none block">
+                        {ai.name}
+                      </span>
+                      <span className="text-[10px] text-neutral-400 leading-none">
+                        {ai.company}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Status pill */}
+                  {isSpeaking ? (
+                    <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-blue-500/20 border border-blue-400/40 text-[9px] font-semibold text-blue-300">
+                      <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-ping" />
+                      Speaking
+                    </span>
+                  ) : (
+                    <span className="text-[9px] text-neutral-500 font-mono">
+                      Ready
+                    </span>
+                  )}
                 </div>
-                {speakingParticipant === 'Gemini' && (
-                  <span className="absolute -inset-1 rounded-2xl border-2 border-blue-400 animate-ping opacity-30" />
-                )}
-              </div>
 
-              {speakingParticipant === 'Gemini' && (
-                <span className="text-[11px] text-blue-200 mt-1.5 font-medium flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
-                  Speaking...
-                </span>
-              )}
-            </div>
-
-            {/* Label */}
-            <span className="relative z-10 text-xs font-semibold text-white/90 drop-shadow-md">
-              Gemini
-            </span>
-          </div>
-
-          {/* Participant 3: "Claude" */}
-          <div
-            className={`relative flex-1 min-h-[90px] max-h-[170px] rounded-xl bg-[#616161] border overflow-hidden flex flex-col justify-end p-2.5 transition-all ${
-              speakingParticipant === 'Claude'
-                ? 'border-amber-400/80 ring-2 ring-amber-500/30'
-                : 'border-neutral-700'
-            }`}
-          >
-            {/* Ambient avatar inside Claude tile */}
-            <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-b from-[#4a4a4a] to-[#3a3a3a]">
-              <div className="relative">
-                <div
-                  className={`w-10 h-10 rounded-2xl bg-gradient-to-tr from-[#c2410c] to-[#ea580c] flex items-center justify-center shadow-lg transition-transform ${
-                    speakingParticipant === 'Claude' ? 'scale-105' : 'scale-95 opacity-85'
-                  }`}
-                >
-                  <span className="text-white text-sm font-black">C</span>
+                {/* Center: Speaking Waveform or Listening State */}
+                <div className="relative z-10 my-auto flex items-center justify-center py-1">
+                  {isSpeaking ? (
+                    <div className="flex items-center gap-1">
+                      <span className="w-1 h-3.5 bg-blue-400 rounded-full animate-pulse" />
+                      <span className="w-1 h-5 bg-blue-400 rounded-full animate-pulse delay-75" />
+                      <span className="w-1 h-7 bg-blue-300 rounded-full animate-pulse delay-150" />
+                      <span className="w-1 h-4 bg-blue-400 rounded-full animate-pulse delay-100" />
+                      <span className="w-1 h-2 bg-blue-400 rounded-full animate-pulse delay-200" />
+                    </div>
+                  ) : (
+                    <span className="text-[10px] text-neutral-400 italic">
+                      Evaluating candidate...
+                    </span>
+                  )}
                 </div>
-                {speakingParticipant === 'Claude' && (
-                  <span className="absolute -inset-1 rounded-2xl border-2 border-amber-400 animate-ping opacity-30" />
-                )}
+
+                {/* Bottom row: Role & Model name */}
+                <div className="relative z-10 flex items-center justify-between pt-1.5 border-t border-neutral-800/80 text-[10px]">
+                  <span className="text-neutral-300 font-medium truncate max-w-[100px]">
+                    {ai.role}
+                  </span>
+                  <span className="text-neutral-400 font-mono text-[9px]">
+                    {ai.model}
+                  </span>
+                </div>
               </div>
-
-              {speakingParticipant === 'Claude' && (
-                <span className="text-[11px] text-amber-200 mt-1.5 font-medium flex items-center gap-1.5">
-                  <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-                  Speaking...
-                </span>
-              )}
-            </div>
-
-            {/* Label */}
-            <span className="relative z-10 text-xs font-semibold text-white/90 drop-shadow-md">
-              Claude
-            </span>
-          </div>
+            );
+          })}
         </div>
 
-        {/* Center Area: Code Editor & Console (Screenshot 5) OR Full Video (Screenshot 6) */}
+        {/* Center Area: User's Camera View (Default) OR VS Code Editor with User Camera beside Console */}
         <div className="lg:col-span-7 bg-[#1c1c1c] flex flex-col min-h-0 overflow-hidden border-r border-neutral-800">
-          {layoutMode === 'code' ? (
+          {layoutMode === 'video' ? (
+            /* 1. Full Camera View Stage (Default when interview starts) */
+            <div className="flex-1 min-h-0 bg-[#141414] p-3 sm:p-4 flex flex-col justify-between items-center relative overflow-hidden">
+              {/* Large User Camera Container */}
+              <div className="w-full flex-1 rounded-2xl bg-[#202020] border border-neutral-700/80 flex flex-col justify-between p-4 relative overflow-hidden shadow-2xl min-h-0">
+                {/* Video stream or camera off fallback */}
+                {hasCameraPermission && !isCameraOff ? (
+                  <video
+                    ref={bindVideoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className="absolute inset-0 w-full h-full object-cover"
+                  />
+                ) : (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-b from-[#2a2a2a] to-[#181818]">
+                    <div className="w-24 h-24 rounded-full bg-neutral-700 border-2 border-neutral-600 flex items-center justify-center text-white text-3xl font-bold shadow-xl">
+                      You
+                    </div>
+                    <p className="text-sm text-neutral-300 mt-3 font-medium">
+                      {isCameraOff ? 'Camera Turned Off' : 'Live Camera Active'}
+                    </p>
+                    <span className="text-xs text-neutral-400 mt-1">
+                      Webcam stream feed ready for evaluation
+                    </span>
+                  </div>
+                )}
+
+                {/* Top overlay inside camera: Question banner + active AI interviewer */}
+                <div className="relative z-10 flex items-start justify-between gap-3">
+                  <div className="bg-black/70 backdrop-blur-md px-3.5 py-2 rounded-xl border border-neutral-700/60 max-w-xl shadow-lg">
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="px-2 py-0.5 rounded-full bg-[#0c3e74] text-white text-[10px] font-bold">
+                        Q{currentQIndex + 1}/{track.questions.length}
+                      </span>
+                      <span className="text-[11px] text-neutral-300 font-semibold flex items-center gap-1.5">
+                        <span className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse" />
+                        Interviewer: {speakingParticipant}
+                      </span>
+                    </div>
+                    <p className="text-xs md:text-sm font-medium text-white leading-relaxed">
+                      {currentQuestionText}
+                    </p>
+                  </div>
+
+                  {/* User indicator & audio wave */}
+                  <div className="flex items-center gap-2 bg-black/70 backdrop-blur-md px-3 py-1.5 rounded-xl border border-neutral-700/60 shadow-lg">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                    <span className="text-xs font-semibold text-white">You</span>
+                    {!isMicMuted && (
+                      <div className="flex items-center gap-0.5 ml-1">
+                        <span className="w-1 h-3 bg-emerald-400 rounded-full animate-pulse" />
+                        <span className="w-1 h-4 bg-emerald-400 rounded-full animate-pulse delay-75" />
+                        <span className="w-1 h-2 bg-emerald-400 rounded-full animate-pulse delay-150" />
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Bottom overlay: Reply input on left, and THE VS CODE BUTTON on the right */}
+                <div className="relative z-10 flex flex-wrap items-center justify-between gap-3 mt-auto pt-4">
+                  {/* Quick spoken/typed answer input */}
+                  <div className="flex-1 min-w-[260px] max-w-lg bg-black/80 backdrop-blur-md p-1.5 rounded-2xl border border-neutral-700/60 flex items-center gap-2 shadow-xl">
+                    <input
+                      type="text"
+                      value={userSpeechInput}
+                      onChange={(e) => setUserSpeechInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleSubmitResponse();
+                      }}
+                      placeholder="Speak or type your answer to the 3 AI services..."
+                      className="flex-1 bg-transparent text-white text-xs px-3 py-1.5 focus:outline-hidden placeholder-neutral-400"
+                    />
+                    <button
+                      onClick={handleSubmitResponse}
+                      disabled={!userSpeechInput.trim()}
+                      className="px-3.5 py-1.5 rounded-xl bg-[#0c3e74] hover:bg-[#0a3360] disabled:opacity-40 text-white text-xs font-semibold flex items-center gap-1 cursor-pointer transition-all shrink-0"
+                    >
+                      <span>Submit</span>
+                      <Send className="w-3 h-3" />
+                    </button>
+                  </div>
+
+                  {/* VS CODE EDITOR OPENING BUTTON (Bottom right side of the camera view) */}
+                  <button
+                    id="open-vscode-btn"
+                    onClick={() => setLayoutMode('code')}
+                    className="flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-[#007acc] hover:bg-[#0062a3] text-white font-bold text-xs md:text-sm shadow-2xl hover:shadow-blue-500/30 border border-blue-400/50 transition-all transform hover:-translate-y-0.5 active:scale-95 cursor-pointer z-20 group shrink-0"
+                    title="Open VS Code Editor & Console Workspace"
+                  >
+                    <div className="w-6 h-6 rounded-lg bg-black/25 flex items-center justify-center">
+                      <Code2 className="w-4 h-4 text-white group-hover:scale-110 transition-transform" />
+                    </div>
+                    <div className="flex flex-col text-left">
+                      <span className="text-[10px] text-blue-100 uppercase tracking-wider font-semibold">
+                        Workspace
+                      </span>
+                      <span className="text-xs md:text-sm font-bold leading-none">
+                        Open VS Code Editor
+                      </span>
+                    </div>
+                    <ArrowRight className="w-4 h-4 text-blue-100 group-hover:translate-x-1 transition-transform ml-1" />
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            /* 2. VS Code Editor View with User's Camera beside Console */
             <>
               {/* Question Banner */}
-              <div className="bg-[#242424] px-5 py-3.5 border-b border-neutral-800 flex items-start justify-between gap-4">
+              <div className="bg-[#242424] px-5 py-3.5 border-b border-neutral-800 flex items-start justify-between gap-4 shrink-0">
                 <div className="flex items-start gap-3">
                   <span className="px-2.5 py-0.5 rounded-full bg-[#0c3e74] text-white text-[11px] font-bold mt-0.5">
                     Q{currentQIndex + 1}/{track.questions.length}
@@ -484,9 +639,9 @@ export function LivePracticeView({
                 </div>
               </div>
 
-              {/* Code Editor Top Bar matching Screenshot 5 */}
-              <div className="bg-[#181818] px-4 py-2 border-b border-neutral-800/80 flex items-center justify-between">
-                {/* Language Dropdown (e.g. "Python v") */}
+              {/* Code Editor Top Bar */}
+              <div className="bg-[#181818] px-4 py-2 border-b border-neutral-800/80 flex items-center justify-between shrink-0">
+                {/* Language Dropdown */}
                 <div className="relative flex items-center gap-2">
                   <select
                     id="language-select"
@@ -503,16 +658,28 @@ export function LivePracticeView({
                   <ChevronDown className="w-3.5 h-3.5 text-neutral-400 absolute right-2 pointer-events-none" />
                 </div>
 
-                {/* Run Button with magenta/purple pill badge from screenshot */}
-                <button
-                  id="run-code-btn"
-                  onClick={handleRunCode}
-                  disabled={isExecuting}
-                  className="flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-[#3b1263] hover:bg-[#581c87] active:scale-95 text-fuchsia-200 text-xs font-bold border border-fuchsia-700/40 transition-all cursor-pointer shadow-xs"
-                >
-                  <span>{isExecuting ? 'Running...' : 'Run'}</span>
-                  <Play className="w-3 h-3 fill-current" />
-                </button>
+                <div className="flex items-center gap-2.5">
+                  {/* Switch back to full camera stage */}
+                  <button
+                    onClick={() => setLayoutMode('video')}
+                    className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-neutral-800 hover:bg-neutral-700 text-neutral-300 hover:text-white text-xs font-semibold border border-neutral-700 transition-colors cursor-pointer"
+                    title="Switch back to Full Camera View"
+                  >
+                    <Maximize2 className="w-3 h-3" />
+                    <span className="hidden sm:inline">Camera View</span>
+                  </button>
+
+                  {/* Run Button */}
+                  <button
+                    id="run-code-btn"
+                    onClick={handleRunCode}
+                    disabled={isExecuting}
+                    className="flex items-center gap-1.5 px-3.5 py-1 rounded-full bg-[#3b1263] hover:bg-[#581c87] active:scale-95 text-fuchsia-200 text-xs font-bold border border-fuchsia-700/40 transition-all cursor-pointer shadow-xs"
+                  >
+                    <span>{isExecuting ? 'Running...' : 'Run'}</span>
+                    <Play className="w-3 h-3 fill-current" />
+                  </button>
+                </div>
               </div>
 
               {/* Code Editor Workspace with Line Numbers */}
@@ -534,97 +701,121 @@ export function LivePracticeView({
                 />
               </div>
 
-              {/* Output Console / Interactive Verbal Response Section */}
-              <div className="h-36 bg-[#1a1a1a] border-t border-neutral-800 flex flex-col shrink-0">
-                <div className="px-4 py-1.5 bg-[#141414] border-b border-neutral-800/80 flex items-center justify-between text-xs text-neutral-400">
-                  <span className="flex items-center gap-1.5 font-semibold">
-                    <Terminal className="w-3.5 h-3.5 text-neutral-500" />
-                    Console & Your Spoken Answer
-                  </span>
-                  {codeOutput && (
+              {/* Bottom Area: User Camera beside Console */}
+              <div className="h-44 bg-[#181818] border-t border-neutral-800 flex shrink-0 min-h-0 overflow-hidden">
+                {/* User's Camera Box beside the Console */}
+                <div className="w-52 sm:w-60 md:w-68 bg-[#121212] border-r border-neutral-800 flex flex-col relative shrink-0 overflow-hidden group">
+                  {/* Top camera bar with "You" & expand button */}
+                  <div className="absolute top-2 left-2 right-2 flex items-center justify-between z-10">
+                    <div className="flex items-center gap-1.5 bg-black/70 backdrop-blur-xs px-2 py-0.5 rounded-md border border-neutral-700/50">
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                      <span className="text-[11px] font-semibold text-white">You</span>
+                    </div>
+
                     <button
-                      onClick={() => setCodeOutput('')}
-                      className="text-[11px] text-neutral-500 hover:text-neutral-300"
+                      onClick={() => setLayoutMode('video')}
+                      className="bg-black/70 hover:bg-black/90 text-neutral-300 hover:text-white px-2 py-0.5 rounded-md text-[10px] font-medium flex items-center gap-1 border border-neutral-700/50 transition-colors cursor-pointer"
+                      title="Expand to Full Camera View"
                     >
-                      Clear
+                      <Maximize2 className="w-3 h-3" />
+                      <span className="hidden sm:inline">Expand</span>
                     </button>
-                  )}
-                </div>
+                  </div>
 
-                <div className="flex-1 p-3 overflow-y-auto font-mono text-xs text-emerald-400/90 whitespace-pre-wrap">
-                  {codeOutput || (
-                    <span className="text-neutral-600 italic">
-                      Click 'Run' to execute code against unit tests, or speak/type your answer below.
+                  {/* Video stream or avatar */}
+                  <div className="flex-1 relative flex items-center justify-center bg-neutral-900 overflow-hidden">
+                    {hasCameraPermission && !isCameraOff ? (
+                      <video
+                        ref={bindVideoRef}
+                        autoPlay
+                        playsInline
+                        muted
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex flex-col items-center justify-center">
+                        <div className="w-10 h-10 rounded-full bg-neutral-700 flex items-center justify-center text-white text-sm font-bold shadow-md">
+                          You
+                        </div>
+                        <span className="text-[10px] text-neutral-400 mt-1">
+                          {isCameraOff ? 'Camera Off' : 'Camera Ready'}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Bottom mic status bar */}
+                  <div className="bg-[#141414] px-2.5 py-1 border-t border-neutral-800 flex items-center justify-between text-[10px] text-neutral-400">
+                    <span className="flex items-center gap-1">
+                      <span className={`w-1.5 h-1.5 rounded-full ${isMicMuted ? 'bg-red-400' : 'bg-emerald-400'}`} />
+                      {isMicMuted ? 'Mic Muted' : 'Live Audio'}
                     </span>
-                  )}
+                    {!isMicMuted && (
+                      <div className="flex items-center gap-0.5">
+                        <span className="w-0.5 h-2 bg-emerald-400 rounded-full animate-pulse" />
+                        <span className="w-0.5 h-3 bg-emerald-400 rounded-full animate-pulse delay-75" />
+                        <span className="w-0.5 h-1.5 bg-emerald-400 rounded-full animate-pulse delay-150" />
+                      </div>
+                    )}
+                  </div>
                 </div>
 
-                {/* Answer prompt input */}
-                <div className="p-2.5 bg-[#161616] border-t border-neutral-800 flex items-center gap-2">
-                  <input
-                    type="text"
-                    id="user-answer-input"
-                    value={userSpeechInput}
-                    onChange={(e) => setUserSpeechInput(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') handleSubmitResponse();
-                    }}
-                    placeholder="Type your response to Gemini & Claude..."
-                    className="flex-1 bg-[#222] text-neutral-200 text-xs px-3.5 py-2 rounded-xl border border-neutral-700/60 focus:outline-hidden focus:border-blue-500"
-                  />
-                  <button
-                    onClick={handleSubmitResponse}
-                    disabled={!userSpeechInput.trim()}
-                    className="px-3 py-2 rounded-xl bg-[#0c3e74] hover:bg-[#0a3360] disabled:opacity-40 text-white text-xs font-semibold flex items-center gap-1 transition-all"
-                  >
-                    <span>Reply</span>
-                    <Send className="w-3 h-3" />
-                  </button>
+                {/* Console & Spoken Response beside Camera */}
+                <div className="flex-1 flex flex-col min-w-0 bg-[#161616]">
+                  {/* Console Header Bar */}
+                  <div className="px-3.5 py-1.5 bg-[#141414] border-b border-neutral-800 flex items-center justify-between text-xs text-neutral-400 shrink-0">
+                    <span className="flex items-center gap-1.5 font-semibold text-neutral-300">
+                      <Terminal className="w-3.5 h-3.5 text-neutral-500" />
+                      Console & Your Spoken Answer
+                    </span>
+                    {codeOutput && (
+                      <button
+                        onClick={() => setCodeOutput('')}
+                        className="text-[11px] text-neutral-500 hover:text-neutral-300 cursor-pointer"
+                      >
+                        Clear
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Output Console Log */}
+                  <div className="flex-1 p-2.5 overflow-y-auto font-mono text-xs text-emerald-400/90 whitespace-pre-wrap">
+                    {codeOutput || (
+                      <span className="text-neutral-600 italic">
+                        Click 'Run' to compile & test code, or type/speak your answer to the 3 AI interviewers below.
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Spoken / Quick Text input bar */}
+                  <div className="p-2 bg-[#121212] border-t border-neutral-800 flex items-center gap-2 shrink-0">
+                    <input
+                      type="text"
+                      id="user-answer-input"
+                      value={userSpeechInput}
+                      onChange={(e) => setUserSpeechInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleSubmitResponse();
+                      }}
+                      placeholder="Type your response to the 3 AI services (Gemini, Claude, GPT-4o)..."
+                      className="flex-1 bg-[#222] text-neutral-200 text-xs px-3 py-1.5 rounded-xl border border-neutral-700/60 focus:outline-hidden focus:border-blue-500"
+                    />
+                    <button
+                      onClick={handleSubmitResponse}
+                      disabled={!userSpeechInput.trim()}
+                      className="px-3 py-1.5 rounded-xl bg-[#0c3e74] hover:bg-[#0a3360] disabled:opacity-40 text-white text-xs font-semibold flex items-center gap-1 transition-all cursor-pointer shrink-0"
+                    >
+                      <span>Reply</span>
+                      <Send className="w-3 h-3" />
+                    </button>
+                  </div>
                 </div>
               </div>
             </>
-          ) : (
-            /* Screenshot 6 (Group 74) Full Video Stage */
-            <div className="flex-1 bg-[#1a1a1a] p-6 flex flex-col justify-between items-center relative overflow-hidden">
-              <div className="w-full max-w-2xl flex-1 rounded-2xl bg-[#595959] border border-neutral-700 flex flex-col justify-end p-6 relative overflow-hidden shadow-2xl">
-                {hasCameraPermission && !isCameraOff ? (
-                  <video
-                    ref={videoRef}
-                    autoPlay
-                    playsInline
-                    muted
-                    className="absolute inset-0 w-full h-full object-cover"
-                  />
-                ) : (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center bg-gradient-to-b from-[#444] to-[#2c2c2c]">
-                    <div className="w-20 h-20 rounded-full bg-neutral-600 flex items-center justify-center text-white text-2xl font-bold shadow-lg">
-                      Billu
-                    </div>
-                    <p className="text-sm text-neutral-300 mt-2 font-medium">
-                      Camera Stream Active
-                    </p>
-                  </div>
-                )}
-                <span className="relative z-10 text-sm font-bold text-white drop-shadow-md">
-                  You
-                </span>
-              </div>
-
-              {/* Active question banner in video mode */}
-              <div className="w-full max-w-2xl mt-4 bg-neutral-900/90 backdrop-blur-md rounded-2xl p-4 border border-neutral-800 text-center">
-                <p className="text-xs font-semibold text-blue-400 uppercase tracking-wider mb-1">
-                  Current Question from {speakingParticipant}
-                </p>
-                <p className="text-sm font-medium text-neutral-200">
-                  {currentQuestionText}
-                </p>
-              </div>
-            </div>
           )}
         </div>
 
-        {/* Right Column: Warm Cream "Summary" Sidebar (Screenshot 5 & 6) */}
-        {/* Right Column: Warm Cream "Summary" Sidebar (Screenshot 5 & 6) */}
+        {/* Right Column: Warm Cream "Summary" Sidebar */}
         <div className="lg:col-span-3 bg-[#F6F4EB] text-neutral-900 p-4 flex flex-col min-h-0 overflow-hidden border-l border-neutral-300">
           <div className="flex flex-col min-h-0 flex-1">
             {/* Header: Summary */}
@@ -632,7 +823,7 @@ export function LivePracticeView({
               Summary
             </h2>
 
-            {/* Note Cards Stack matching Screenshot 5 & 6 */}
+            {/* Note Cards Stack */}
             <div className="flex-1 min-h-0 overflow-y-auto space-y-3 pr-1 scrollbar-thin scrollbar-thumb-neutral-400">
               {liveNotes.map((note, index) => {
                 const isPrimary = index === 0;
@@ -646,7 +837,7 @@ export function LivePracticeView({
                         : 'bg-[#cfd4d8] text-neutral-800'
                     }`}
                   >
-                    {/* Circle marker on top left matching screenshot */}
+                    {/* Circle marker on top left matching design */}
                     <div className="flex items-center gap-2 mb-2">
                       <div
                         className={`w-3.5 h-3.5 rounded-full ${
@@ -700,7 +891,7 @@ export function LivePracticeView({
         </div>
       </div>
 
-      {/* Bottom Bar matching Screenshot 5 & 6 */}
+      {/* Bottom Bar */}
       <footer className="h-16 bg-[#141414] border-t border-neutral-800 px-6 flex items-center justify-between z-20 shrink-0">
         {/* Live Timer "5:12" */}
         <div className="flex items-center gap-3">
@@ -712,7 +903,7 @@ export function LivePracticeView({
           </span>
           <button
             onClick={() => setIsTimerRunning(!isTimerRunning)}
-            className="text-xs text-neutral-500 hover:text-neutral-300 underline"
+            className="text-xs text-neutral-500 hover:text-neutral-300 underline cursor-pointer"
           >
             {isTimerRunning ? 'Pause' : 'Resume'}
           </button>
@@ -723,7 +914,7 @@ export function LivePracticeView({
           {/* Mute Button */}
           <button
             onClick={() => setIsMicMuted(!isMicMuted)}
-            className={`p-3 rounded-full transition-all ${
+            className={`p-3 rounded-full transition-all cursor-pointer ${
               isMicMuted
                 ? 'bg-red-600/80 text-white hover:bg-red-700'
                 : 'bg-neutral-800 text-neutral-200 hover:bg-neutral-700'
@@ -735,8 +926,8 @@ export function LivePracticeView({
 
           {/* Camera Button */}
           <button
-            onClick={() => setIsCameraOff(!isCameraOff)}
-            className={`p-3 rounded-full transition-all ${
+            onClick={handleToggleCamera}
+            className={`p-3 rounded-full transition-all cursor-pointer ${
               isCameraOff
                 ? 'bg-red-600/80 text-white hover:bg-red-700'
                 : 'bg-neutral-800 text-neutral-200 hover:bg-neutral-700'

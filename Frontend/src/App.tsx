@@ -1,12 +1,13 @@
 import { useState, useEffect } from 'react';
 import { Menu } from 'lucide-react';
-import { NavTab, HistoryFolder, PracticeTrack, QuestionResponse, AttemptReview } from './types';
+import { NavTab, HistoryFolder, PracticeTrack, QuestionResponse, AttemptReview, InterviewConfig } from './types';
 import { INITIAL_FOLDERS, PRACTICE_TRACKS } from './data/mockData';
 import { Sidebar } from './components/Sidebar';
 import { HomeView } from './components/HomeView';
 import { PracticesView } from './components/PracticesView';
 import { AttemptReviewView } from './components/AttemptReviewView';
 import { LivePracticeView } from './components/LivePracticeView';
+import { InterviewSetupView } from './components/InterviewSetupView';
 import { AnalyticsView } from './components/AnalyticsView';
 import { BestPracticesView } from './components/BestPracticesView';
 import { SettingsModal } from './components/SettingsModal';
@@ -29,9 +30,12 @@ export default function App() {
   // Track the active 19-digit Section/Session ID for backend integration (e.g. 2567837851963606030)
   const [activeSessionId, setActiveSessionId] = useState<string | null>(() => extractSessionIdFromUrl());
 
+  // Configuration selected in setup view (difficulty, camera & mic access)
+  const [interviewConfig, setInterviewConfig] = useState<InterviewConfig | null>(null);
+
   const [currentTab, setCurrentTab] = useState<NavTab>(() => {
     const initialSession = extractSessionIdFromUrl();
-    return initialSession ? 'live-practice' : 'home';
+    return initialSession ? 'practice-setup' : 'home';
   });
   const [folders, setFolders] = useState<HistoryFolder[]>(() => {
     const saved = localStorage.getItem('intertrain_folders');
@@ -75,10 +79,10 @@ export default function App() {
       const poppedSessionId = extractSessionIdFromUrl();
       if (poppedSessionId) {
         setActiveSessionId(poppedSessionId);
-        setCurrentTab('live-practice');
+        setCurrentTab((prev) => (prev === 'live-practice' ? 'live-practice' : 'practice-setup'));
       } else {
         setActiveSessionId(null);
-        setCurrentTab((prev) => (prev === 'live-practice' ? 'home' : prev));
+        setCurrentTab((prev) => (prev === 'live-practice' || prev === 'practice-setup' ? 'home' : prev));
       }
     };
 
@@ -92,13 +96,13 @@ export default function App() {
     setCurrentTab('review');
   };
 
-  // Launch live practice session from a track with 19-digit section ID in URL (e.g. /projects/2567837851963606030)
+  // Launch interview setup stage before starting practice
   const handleStartPracticeTrack = (track: PracticeTrack) => {
     const newSessionId = generateSessionId();
     setActiveTrack(track);
     setActiveSessionId(newSessionId);
     window.history.pushState({ sessionId: newSessionId, trackId: track.id }, '', `/projects/${newSessionId}`);
-    setCurrentTab('live-practice');
+    setCurrentTab('practice-setup');
   };
 
   // Start again from review screen with new unique 19-digit section ID in URL
@@ -113,7 +117,7 @@ export default function App() {
     setActiveTrack(matchedTrack);
     setActiveSessionId(newSessionId);
     window.history.pushState({ sessionId: newSessionId, trackId: matchedTrack.id }, '', `/projects/${newSessionId}`);
-    setCurrentTab('live-practice');
+    setCurrentTab('practice-setup');
   };
 
   // End live practice and generate attempt
@@ -197,12 +201,34 @@ export default function App() {
     return <LoginPage onLogin={handleLogin} initialMode="signup" />;
   }
 
+  // If in practice setup stage (choosing difficulty, checking camera & mic access)
+  if (currentTab === 'practice-setup') {
+    return (
+      <InterviewSetupView
+        track={activeTrack}
+        sessionId={activeSessionId || generateSessionId()}
+        onJoinInterview={(config) => {
+          setInterviewConfig(config);
+          setCurrentTab('live-practice');
+        }}
+        onBack={() => {
+          setActiveSessionId(null);
+          window.history.pushState(null, '', '/');
+          setCurrentTab('practices');
+        }}
+      />
+    );
+  }
+
   // If in live practice session, render full screen as in Screenshot 5 & 6
   if (currentTab === 'live-practice') {
     return (
       <LivePracticeView
         track={activeTrack}
         sessionId={activeSessionId || undefined}
+        difficulty={interviewConfig?.difficulty}
+        initialCameraOn={interviewConfig?.isCameraEnabled}
+        initialMicMuted={interviewConfig ? !interviewConfig.isMicEnabled : false}
         onEndSession={handleEndLiveSession}
         onExit={() => {
           setActiveSessionId(null);
@@ -214,12 +240,12 @@ export default function App() {
   }
 
   return (
-    <div className="min-h-screen bg-[#141414] text-neutral-100 flex flex-col font-sans">
+    <div className="min-h-screen bg-[#F4F6F9] text-slate-900 flex flex-col font-sans">
       {/* Mobile Top Header */}
-      <header className="lg:hidden flex items-center justify-between px-4 py-3 bg-[#141414] border-b border-neutral-800 sticky top-0 z-30">
+      <header className="lg:hidden flex items-center justify-between px-4 py-3 bg-[#0B0F19] border-b border-slate-800 sticky top-0 z-30 text-white">
         <button
           onClick={() => setIsMobileSidebarOpen(true)}
-          className="p-2 rounded-xl text-neutral-400 hover:text-white hover:bg-neutral-800"
+          className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-slate-800"
           aria-label="Open navigation menu"
         >
           <Menu className="w-6 h-6" />
@@ -231,9 +257,9 @@ export default function App() {
 
         <button
           onClick={() => setIsSettingsOpen(true)}
-          className="w-8 h-8 rounded-full overflow-hidden border border-neutral-700"
+          className="w-8 h-8 rounded-full overflow-hidden border border-slate-700"
         >
-          <div className="w-full h-full bg-[#0c3e74] flex items-center justify-center text-xs font-bold text-white">
+          <div className="w-full h-full bg-blue-600 flex items-center justify-center text-xs font-bold text-white">
             {currentUser?.name ? currentUser.name.charAt(0).toUpperCase() : 'B'}
           </div>
         </button>
@@ -265,6 +291,7 @@ export default function App() {
               folders={folders}
               onSelectFolder={handleSelectFolder}
               onStartPractice={() => setCurrentTab('practices')}
+              onViewProgress={() => setCurrentTab('analytics')}
               userName={currentUser?.name}
             />
           )}
