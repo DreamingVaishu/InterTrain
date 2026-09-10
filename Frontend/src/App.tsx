@@ -10,8 +10,21 @@ import { LivePracticeView } from './components/LivePracticeView';
 import { AnalyticsView } from './components/AnalyticsView';
 import { BestPracticesView } from './components/BestPracticesView';
 import { SettingsModal } from './components/SettingsModal';
+import LoginPage, { UserAuthData } from './components/auth/LoginPage';
 
 export default function App() {
+  const [currentUser, setCurrentUser] = useState<UserAuthData | null>(() => {
+    const saved = localStorage.getItem('intertrain_user');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  });
+
   const [currentTab, setCurrentTab] = useState<NavTab>('home');
   const [folders, setFolders] = useState<HistoryFolder[]>(() => {
     const saved = localStorage.getItem('intertrain_folders');
@@ -30,6 +43,17 @@ export default function App() {
   const [sidebarSearch, setSidebarSearch] = useState('');
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
+  const handleLogin = (userData: UserAuthData) => {
+    setCurrentUser(userData);
+    localStorage.setItem('intertrain_user', JSON.stringify(userData));
+  };
+
+  const handleLogout = () => {
+    setCurrentUser(null);
+    localStorage.removeItem('intertrain_user');
+    setCurrentTab('home');
+  };
 
   // Sync to local storage
   useEffect(() => {
@@ -131,6 +155,11 @@ export default function App() {
   const selectedFolder =
     folders.find((f) => f.id === selectedFolderId) || folders[0];
 
+  // If not authenticated, render the Sign Up / Login page
+  if (!currentUser) {
+    return <LoginPage onLogin={handleLogin} initialMode="signup" />;
+  }
+
   // If in live practice session, render full screen as in Screenshot 5 & 6
   if (currentTab === 'live-practice') {
     return (
@@ -163,7 +192,7 @@ export default function App() {
           className="w-8 h-8 rounded-full overflow-hidden border border-neutral-700"
         >
           <div className="w-full h-full bg-[#0c3e74] flex items-center justify-center text-xs font-bold text-white">
-            B
+            {currentUser?.name ? currentUser.name.charAt(0).toUpperCase() : 'B'}
           </div>
         </button>
       </header>
@@ -183,6 +212,8 @@ export default function App() {
           setSidebarSearch={setSidebarSearch}
           isMobileOpen={isMobileSidebarOpen}
           onCloseMobile={() => setIsMobileSidebarOpen(false)}
+          currentUser={currentUser}
+          onLogout={handleLogout}
         />
 
         {/* Main Content View with margin offset for sidebar on lg screens */}
@@ -192,6 +223,7 @@ export default function App() {
               folders={folders}
               onSelectFolder={handleSelectFolder}
               onStartPractice={() => setCurrentTab('practices')}
+              userName={currentUser?.name}
             />
           )}
 

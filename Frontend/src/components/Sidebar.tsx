@@ -7,6 +7,7 @@ import {
   Search,
   Settings,
   X,
+  LogOut,
 } from 'lucide-react';
 import { NavTab, HistoryFolder } from '../types';
 import { UserAvatar } from './UserAvatar';
@@ -22,6 +23,8 @@ interface SidebarProps {
   setSidebarSearch: (q: string) => void;
   isMobileOpen?: boolean;
   onCloseMobile?: () => void;
+  currentUser?: { name: string; email: string; isGuest?: boolean } | null;
+  onLogout?: () => void;
 }
 
 export function Sidebar({
@@ -35,6 +38,8 @@ export function Sidebar({
   setSidebarSearch,
   isMobileOpen = false,
   onCloseMobile,
+  currentUser,
+  onLogout,
 }: SidebarProps) {
   const filteredFolders = folders.filter((f) =>
     f.title.toLowerCase().includes(sidebarSearch.toLowerCase())
@@ -202,25 +207,44 @@ export function Sidebar({
           <div className="flex items-center gap-3 min-w-0">
             <UserAvatar size="md" />
             <div className="min-w-0">
-              <p className="text-sm font-semibold text-neutral-200 truncate leading-tight">
-                Billu badmash
-              </p>
+              <div className="flex items-center gap-1.5 min-w-0">
+                <p className="text-sm font-semibold text-neutral-200 truncate leading-tight">
+                  {currentUser?.name || 'Billu badmash'}
+                </p>
+                {currentUser?.isGuest && (
+                  <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 shrink-0">
+                    DEV
+                  </span>
+                )}
+              </div>
               <span className="text-[11px] text-emerald-400 flex items-center gap-1.5 font-medium">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-                Online
+                {currentUser?.isGuest ? 'Guest Bypass' : 'Online'}
               </span>
             </div>
           </div>
 
-          <button
-            id="settings-trigger-btn"
-            onClick={onOpenSettings}
-            className="text-neutral-400 hover:text-white p-2 rounded-full hover:bg-neutral-800/70 transition-colors"
-            title="Settings & Audio/Video Config"
-            aria-label="Settings"
-          >
-            <Settings className="w-4 h-4" />
-          </button>
+          <div className="flex items-center gap-1">
+            {onLogout && (
+              <button
+                onClick={onLogout}
+                className="text-neutral-400 hover:text-red-400 p-2 rounded-full hover:bg-neutral-800/70 transition-colors"
+                title="Sign Out"
+                aria-label="Sign Out"
+              >
+                <LogOut className="w-4 h-4" />
+              </button>
+            )}
+            <button
+              id="settings-trigger-btn"
+              onClick={onOpenSettings}
+              className="text-neutral-400 hover:text-white p-2 rounded-full hover:bg-neutral-800/70 transition-colors"
+              title="Settings & Audio/Video Config"
+              aria-label="Settings"
+            >
+              <Settings className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       </aside>
     </>

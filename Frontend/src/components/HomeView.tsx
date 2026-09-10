@@ -7,9 +7,12 @@ interface HomeViewProps {
   folders: HistoryFolder[];
   onSelectFolder: (folderId: string) => void;
   onStartPractice: () => void;
+  userName?: string;
 }
 
-export function HomeView({ folders, onSelectFolder, onStartPractice }: HomeViewProps) {
+export function HomeView({ folders, onSelectFolder, onStartPractice, userName }: HomeViewProps) {
+  const displayName = userName || 'Billu badmash';
+
   return (
     <div className="relative min-h-screen bg-[#DCDFE2] text-neutral-900 p-6 md:p-10 lg:p-12 overflow-hidden flex flex-col justify-between">
       {/* Background Watermark silhouette from screenshot */}
@@ -22,7 +25,7 @@ export function HomeView({ folders, onSelectFolder, onStartPractice }: HomeViewP
             Welcome back!
           </p>
           <h1 className="text-4xl md:text-5xl font-extrabold text-neutral-950 tracking-tight mt-1 font-sans">
-            Billu badmash
+            {displayName}
           </h1>
         </header>
 
@@ -77,7 +80,7 @@ export function HomeView({ folders, onSelectFolder, onStartPractice }: HomeViewP
       </div>
 
       <footer className="relative z-10 pt-10 text-xs text-neutral-500 font-medium">
-        InterTrain AI Mock Interview System • Personalized for Billu badmash
+        InterTrain AI Mock Interview System • Personalized for {displayName}
       </footer>
     </div>
   );
