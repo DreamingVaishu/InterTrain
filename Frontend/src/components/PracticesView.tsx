@@ -148,17 +148,7 @@ export function PracticesView({
   const [selectedQuestionTypes, setSelectedQuestionTypes] = useState<string[]>([]);
   const [selectedTimeBracket, setSelectedTimeBracket] = useState<string | null>(null);
   const [sortBy, setSortBy] = useState<'Popular' | 'Newest' | 'Difficulty' | 'Duration'>('Popular');
-  const [showBookmarkedOnly, setShowBookmarkedOnly] = useState(false);
-  const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState(false);
-
-  const [bookmarkedSetIds, setBookmarkedSetIds] = useState<Set<string>>(() => {
-    try {
-      const saved = localStorage.getItem('intertrain_practice_bookmarks');
-      return saved ? new Set(JSON.parse(saved)) : new Set();
-    } catch {
-      return new Set();
-    }
-  });
+  const [bookmarkedSetIds, setBookmarkedSetIds] = useState<Set<string>>(new Set());
 
   // Collapsible filter sections
   const [isDifficultyOpen, setIsDifficultyOpen] = useState(true);
@@ -197,9 +187,6 @@ export function PracticesView({
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
-      try {
-        localStorage.setItem('intertrain_practice_bookmarks', JSON.stringify(Array.from(next)));
-      } catch {}
       return next;
     });
   };
@@ -243,10 +230,6 @@ export function PracticesView({
       if (selectedTimeBracket && set.timeBracket !== selectedTimeBracket) {
         return false;
       }
-      // Bookmarked only filter
-      if (showBookmarkedOnly && !bookmarkedSetIds.has(set.id)) {
-        return false;
-      }
       // Search query
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase();
@@ -269,8 +252,6 @@ export function PracticesView({
     selectedDifficulties,
     selectedQuestionTypes,
     selectedTimeBracket,
-    showBookmarkedOnly,
-    bookmarkedSetIds,
     searchQuery,
     sortBy,
   ]);
@@ -426,12 +407,53 @@ export function PracticesView({
         {/* ── 2. TWO-COLUMN WORKSPACE: FILTERS SIDEBAR + CONTENT AREA ── */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-7">
           {/* ── LEFT FILTERS PANEL (3 COLS) ── */}
-          <aside className={`lg:col-span-3 space-y-6 ${isMobileFiltersOpen ? 'block' : 'hidden lg:block'}`}>
+          <aside className="lg:col-span-3 space-y-6">
             <div className="bg-white rounded-3xl border border-slate-200/80 shadow-xs p-5 space-y-6">
               {/* Filter Title */}
               <div className="flex items-center justify-between pb-3 border-b border-slate-100">
                 <h3 className="font-bold text-slate-900 text-base">Filters</h3>
                 <span className="text-xs text-slate-400 font-medium">Refine</span>
+              </div>
+
+              {/* Group 1: Difficulty */}
+              <div className="space-y-3">
+                <button
+                  onClick={() => setIsDifficultyOpen(!isDifficultyOpen)}
+                  className="w-full flex items-center justify-between text-xs font-bold uppercase tracking-wider text-slate-700"
+                >
+                  <span>Difficulty</span>
+                  {isDifficultyOpen ? (
+                    <ChevronUp className="w-4 h-4 text-slate-400" />
+                  ) : (
+                    <ChevronDown className="w-4 h-4 text-slate-400" />
+                  )}
+                </button>
+
+                {isDifficultyOpen && (
+                  <div className="space-y-2.5 pt-1">
+                    {['Beginner', 'Intermediate', 'Advanced'].map((lvl) => {
+                      const checked = selectedDifficulties.includes(lvl);
+                      return (
+                        <label
+                          key={lvl}
+                          onClick={() => toggleDifficulty(lvl)}
+                          className="flex items-center gap-2.5 text-sm text-slate-700 hover:text-slate-900 cursor-pointer select-none"
+                        >
+                          <div
+                            className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
+                              checked
+                                ? 'bg-blue-600 border-blue-600 text-white'
+                                : 'border-slate-300 bg-white'
+                            }`}
+                          >
+                            {checked && <CheckSquare className="w-3.5 h-3.5 fill-current" />}
+                          </div>
+                          <span className="text-sm font-medium">{lvl}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               {/* Group 2: Question Type */}
@@ -592,49 +614,21 @@ export function PracticesView({
 
             {/* ── Practice Sets Section ── */}
             <div className="space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-3">
-                  <h3 className="font-bold text-slate-900 text-base">Practice Sets</h3>
-                  <span className="text-xs text-slate-400 font-medium">
-                    ({filteredSets.length} available)
-                  </span>
-
-                  {/* Mobile toggle button */}
-                  <button
-                    onClick={() => setIsMobileFiltersOpen(!isMobileFiltersOpen)}
-                    className="lg:hidden px-3 py-1 rounded-xl bg-white border border-slate-200 text-xs font-semibold text-slate-700 shadow-2xs"
+              <div className="flex items-center justify-between">
+                <h3 className="font-bold text-slate-900 text-base">Practice Sets</h3>
+                {/* Sort dropdown */}
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-slate-400">Sort by:</span>
+                  <select
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value as any)}
+                    aria-label="Sort practice sets"
+                    className="bg-white border border-slate-200 rounded-xl px-2.5 py-1 text-xs font-semibold text-slate-700 focus:outline-none focus:border-blue-500 cursor-pointer"
                   >
-                    {isMobileFiltersOpen ? 'Hide Filters' : 'Filters'}
-                  </button>
-                </div>
-
-                {/* Right controls: Saved filter + Sort dropdown */}
-                <div className="flex items-center gap-2.5">
-                  {/* Saved button */}
-                  <button
-                    onClick={() => setShowBookmarkedOnly(!showBookmarkedOnly)}
-                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all border ${
-                      showBookmarkedOnly
-                        ? 'bg-blue-600 text-white border-blue-600 shadow-xs'
-                        : 'bg-white text-slate-600 border-slate-200/90 hover:border-slate-300'
-                    }`}
-                  >
-                    <Bookmark className={`w-3.5 h-3.5 ${showBookmarkedOnly ? 'fill-current' : ''}`} />
-                    <span>Saved ({bookmarkedSetIds.size})</span>
-                  </button>
-
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-xs text-slate-400">Sort by:</span>
-                    <select
-                      value={sortBy}
-                      onChange={(e) => setSortBy(e.target.value as any)}
-                      aria-label="Sort practice sets"
-                      className="bg-white border border-slate-200 rounded-xl px-2.5 py-1 text-xs font-semibold text-slate-700 focus:outline-none focus:border-blue-500 cursor-pointer"
-                    >
-                      <option value="Popular">Popular</option>
-                      <option value="Duration">Duration</option>
-                    </select>
-                  </div>
+                    <option value="Popular">Popular</option>
+                    <option value="Difficulty">Difficulty</option>
+                    <option value="Duration">Duration</option>
+                  </select>
                 </div>
               </div>
 
@@ -684,35 +678,36 @@ export function PracticesView({
                           </p>
                         </div>
 
-                        {/* Category & Type Badges */}
+                        {/* Category & Difficulty Badges */}
                         <div className="flex flex-wrap items-center gap-2 mt-4">
                           <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-700 border border-slate-200">
                             {set.category}
                           </span>
                           <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-100">
-                            {set.questionType}
+                            {set.difficulty}
                           </span>
                         </div>
                       </div>
 
-                      {/* Card Footer: Metadata & Action CTA Button */}
+                      {/* Card Footer: Metadata & Action Arrow Button */}
                       <div className="mt-5 pt-3.5 border-t border-slate-100 flex items-center justify-between">
                         <div className="flex items-center gap-3 text-xs text-slate-400 font-medium">
                           <span className="flex items-center gap-1">
-                            <BookOpen className="w-3.5 h-3.5 text-slate-400" />
+                            <BookOpen className="w-3.5 h-3.5" />
                             {set.questionsCount} Questions
                           </span>
-                          <span className="text-slate-200">·</span>
                           <span className="flex items-center gap-1">
-                            <Clock className="w-3.5 h-3.5 text-slate-400" />
+                            <Clock className="w-3.5 h-3.5" />
                             ~ {set.durationMinutes} mins
                           </span>
                         </div>
 
-                        <div className="flex items-center gap-1 text-xs font-bold text-blue-600 group-hover:text-blue-700">
-                          <span>Start Set</span>
-                          <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                        </div>
+                        <button
+                          className="w-8 h-8 rounded-full bg-blue-50 group-hover:bg-blue-600 text-blue-600 group-hover:text-white flex items-center justify-center transition-all shadow-2xs group-hover:scale-105 cursor-pointer"
+                          aria-label={`Start ${set.title}`}
+                        >
+                          <ArrowRight className="w-4 h-4 stroke-[2.5]" />
+                        </button>
                       </div>
                     </div>
                   );

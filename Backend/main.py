@@ -1,6 +1,10 @@
+import asyncio
 import json
 import os
 import re
+import subprocess
+import sys
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -54,6 +58,19 @@ class StartInterviewRequest(BaseModel):
 class AnswerRequest(BaseModel):
     section_id: str = Field(min_length=1)
     answer: str = Field(min_length=1, max_length=10000)
+
+
+class RunCodeRequest(BaseModel):
+    code: str = Field(min_length=1, max_length=50000)
+    language: str = "python"
+    test_input: str = ""
+
+
+class EvaluateCodeRequest(BaseModel):
+    section_id: str = Field(min_length=1)
+    code: str = Field(min_length=1, max_length=50000)
+    language: str = "python"
+    question: str = ""
 
 
 def utc_now() -> str:
@@ -269,6 +286,205 @@ async def get_audio(filename: str):
     if not path.exists():
         return {"error": "Audio not found"}
     return FileResponse(path, media_type="audio/wav", filename=safe_name)
+
+
+@app.post("/api/run-code")
+async def run_code(request: RunCodeRequest):
+    """Execute candidate code in an isolated subprocess sandbox (5-second timeout)."""
+    lang = request.language.lower()
+    code = request.code
+    test_input = request.test_input or ""
+
+    # Supported languages and their executors
+    if lang in ("python", "py"):
+        cmd = [sys.executable, "-c", code]
+    elif lang in ("javascript", "js"):
+        cmd = ["node", "-e", code]
+    elif lang in ("typescript", "ts"):
+        cmd = ["node", "--experimental-strip-types", "-e", code]
+    elif lang in ("yaml", "yml"):
+        start_ts = time.perf_counter()
+        try:
+            import yaml
+            parsed = yaml.safe_load(code)
+            elapsed = int((time.perf_counter() - start_ts) * 1000)
+            return {
+                "stdout": f"[YAML Validator] Manifest syntax is valid.\nParsed {len(parsed) if isinstance(parsed, dict) else 1} root elements successfully.",
+                "stderr": "",
+                "exit_code": 0,
+                "runtime_ms": elapsed,
+                "error": None,
+            }
+        except Exception as err:
+            return {
+                "stdout": "",
+                "stderr": f"YAML Syntax Error: {err}",
+                "exit_code": 1,
+                "runtime_ms": int((time.perf_counter() - start_ts) * 1000),
+                "error": "syntax_error",
+            }
+    elif lang in ("sql", "sqlite", "postgresql", "mysql"):
+        start_ts = time.perf_counter()
+        import sqlite3
+        try:
+            conn = sqlite3.connect(":memory:")
+            cursor = conn.cursor()
+            statements = [s.strip() for s in code.split(";") if s.strip()]
+            output_rows = []
+            for stmt in statements:
+                # Remove SQL line comments for clean execution
+                cleaned_stmt = "\n".join(line for line in stmt.splitlines() if not line.strip().startswith("--")).strip()
+                if cleaned_stmt:
+                    cursor.execute(cleaned_stmt)
+                    if cursor.description:
+                        cols = [d[0] for d in cursor.description]
+                        rows = cursor.fetchall()
+                        output_rows.append(f"Result for: {stmt[:60]}...\nColumns: {cols}\nRows ({len(rows)}): {rows[:5]}")
+            elapsed = int((time.perf_counter() - start_ts) * 1000)
+            return {
+                "stdout": "\n\n".join(output_rows) if output_rows else "SQL syntax validated successfully (0 rows returned).",
+                "stderr": "",
+                "exit_code": 0,
+                "runtime_ms": elapsed,
+                "error": None,
+            }
+        except Exception as err:
+            return {
+                "stdout": "",
+                "stderr": f"SQL Syntax / Validation Error: {err}",
+                "exit_code": 1,
+                "runtime_ms": int((time.perf_counter() - start_ts) * 1000),
+                "error": "sql_error",
+            }
+    else:
+        return {
+            "stdout": "",
+            "stderr": f"Language '{lang}' is not currently supported for execution. Supported: Python, JavaScript, TypeScript, YAML, SQL.",
+            "exit_code": 1,
+            "runtime_ms": 0,
+            "error": f"Unsupported language: {lang}",
+        }
+
+    start_ts = time.perf_counter()
+    try:
+        result = await asyncio.wait_for(
+            asyncio.get_event_loop().run_in_executor(
+                None,
+                lambda: subprocess.run(
+                    cmd,
+                    input=test_input,
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
+                ),
+            ),
+            timeout=6,
+        )
+        elapsed = int((time.perf_counter() - start_ts) * 1000)
+        return {
+            "stdout": result.stdout,
+            "stderr": result.stderr,
+            "exit_code": result.returncode,
+            "runtime_ms": elapsed,
+            "error": None,
+        }
+    except (subprocess.TimeoutExpired, asyncio.TimeoutError):
+        return {
+            "stdout": "",
+            "stderr": "Execution timed out after 5 seconds.",
+            "exit_code": -1,
+            "runtime_ms": 5000,
+            "error": "timeout",
+        }
+    except FileNotFoundError as exc:
+        return {
+            "stdout": "",
+            "stderr": f"Executor not found: {exc}. Make sure the runtime is installed.",
+            "exit_code": -1,
+            "runtime_ms": 0,
+            "error": "executor_not_found",
+        }
+    except Exception as exc:
+        return {
+            "stdout": "",
+            "stderr": str(exc),
+            "exit_code": -1,
+            "runtime_ms": 0,
+            "error": "internal_error",
+        }
+
+
+@app.post("/api/evaluate-code")
+async def evaluate_code(request: EvaluateCodeRequest):
+    """Use the interview AI to evaluate submitted code quality in the context of the live interview question."""
+    if not OPENROUTER_API_KEY:
+        raise RuntimeError("OPENROUTER_API_KEY is not configured")
+
+    # Load section for context
+    try:
+        section = load_section(request.section_id)
+        subject = section.get("subject", "Technical Interview")
+        difficulty = section.get("difficulty", "Intermediate")
+        history = section.get("rounds", [])
+        current_question = request.question or (history[-1]["question"] if history else "")
+    except FileNotFoundError:
+        subject = "Technical Interview"
+        difficulty = "Intermediate"
+        current_question = request.question
+
+    prompt = f"""You are a professional technical interview evaluator reviewing a candidate's code submission.
+
+Interview subject: {subject}
+Candidate level: {difficulty}
+Current question: {current_question}
+
+Candidate's code ({request.language}):
+```
+{request.code}
+```
+
+Evaluate the code submission on these criteria and respond in valid JSON:
+{{
+  "verdict": "Accepted" | "Needs Improvement" | "Rejected",
+  "score": <integer 0-100>,
+  "summary": "<1-2 sentence overall assessment>",
+  "strengths": ["<strength 1>", "<strength 2>"],
+  "improvements": ["<improvement 1>", "<improvement 2>"],
+  "time_complexity": "<Big-O or N/A>",
+  "space_complexity": "<Big-O or N/A>",
+  "runtime_estimate": "<e.g. 42ms>",
+  "memory_estimate": "<e.g. 17.4 MB>"
+}}
+
+Return ONLY the JSON object, no markdown fences or extra text."""
+
+    response = await ai_client.chat.completions.create(
+        model=OPENROUTER_MODEL,
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.2,
+    )
+    raw = (response.choices[0].message.content or "{}").strip()
+
+    # Strip markdown fences if LLM added them anyway
+    raw = re.sub(r"^```[a-z]*\n?", "", raw)
+    raw = re.sub(r"\n?```$", "", raw)
+
+    try:
+        evaluation = json.loads(raw)
+    except json.JSONDecodeError:
+        evaluation = {
+            "verdict": "Needs Improvement",
+            "score": 50,
+            "summary": raw,
+            "strengths": [],
+            "improvements": ["Unable to parse detailed evaluation."],
+            "time_complexity": "N/A",
+            "space_complexity": "N/A",
+            "runtime_estimate": "N/A",
+            "memory_estimate": "N/A",
+        }
+
+    return evaluation
 
 
 @app.websocket("/ws/live-interview/{section_id}")

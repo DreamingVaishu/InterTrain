@@ -12,6 +12,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { NavTab, HistoryFolder } from '../types';
+import intertrainLogo from '../assets/logo.jpg';
 
 interface SidebarProps {
   currentTab: NavTab;
@@ -20,8 +21,6 @@ interface SidebarProps {
   selectedFolderId?: string;
   onSelectFolder: (folderId: string) => void;
   onOpenSettings: () => void;
-  sidebarSearch: string;
-  setSidebarSearch: (q: string) => void;
   isMobileOpen?: boolean;
   onCloseMobile?: () => void;
   currentUser?: { name: string; email: string; isGuest?: boolean } | null;
@@ -48,42 +47,56 @@ export function Sidebar({
   const navRef = useRef<HTMLElement>(null);
   const iconRefs = useRef<Record<string, HTMLDivElement | null>>({});
 
-  // Navigation Items with Sub-items for Aiva-style Flyout
-  const navItems = [
-    {
-      id: 'home',
-      label: 'Home',
-      icon: Home,
-      tab: 'home' as NavTab,
-      subItems: [
-        { id: 'sub-home-dash', label: 'Dashboard', tab: 'home' as NavTab },
-        { id: 'sub-home-practice', label: 'Practice Sets', tab: 'practices' as NavTab },
-        { id: 'sub-home-analytics', label: 'Analytics', tab: 'analytics' as NavTab },
-      ],
-    },
-    {
-      id: 'practices',
-      label: 'Practice',
-      icon: BookOpen,
-      tab: 'practices' as NavTab,
-      subItems: [
-        { id: 'sub-all-tracks', label: 'All Practice Tracks', tab: 'practices' as NavTab },
-        { id: 'sub-performance', label: 'Review Metrics', tab: 'analytics' as NavTab },
-      ],
-    },
-    {
-      id: 'analytics',
-      label: 'Analytics',
-      icon: BarChart3,
-      tab: 'analytics' as NavTab,
-    },
-    {
-      id: 'history',
-      label: 'History',
-      icon: History,
-      tab: 'history' as NavTab,
-    },
-  ];
+interface NavSubItem {
+  id: string;
+  label: string;
+  tab?: NavTab;
+  folderId?: string;
+  icon?: React.ComponentType<{ className?: string }>;
+}
+
+interface NavItem {
+  id: string;
+  label: string;
+  icon: React.ComponentType<{ className?: string }>;
+  tab: NavTab;
+  subItems?: NavSubItem[];
+}
+
+// Navigation Items with Sub-items for Aiva-style Flyout
+const navItems: NavItem[] = [
+  {
+    id: 'home',
+    label: 'Home',
+    icon: Home,
+    tab: 'home' as NavTab,
+    subItems: [
+      { id: 'sub-home-dash', label: 'Dashboard', tab: 'home' as NavTab },
+      { id: 'sub-home-practice', label: 'Practice Sets', tab: 'practices' as NavTab },
+    ],
+  },
+  {
+    id: 'practices',
+    label: 'Practice',
+    icon: BookOpen,
+    tab: 'practices' as NavTab,
+    subItems: [
+      { id: 'sub-all-tracks', label: 'All Practice Tracks', tab: 'practices' as NavTab },
+    ],
+  },
+  {
+    id: 'analytics',
+    label: 'Analytics',
+    icon: BarChart3,
+    tab: 'analytics' as NavTab,
+  },
+  {
+    id: 'history',
+    label: 'History',
+    icon: History,
+    tab: 'history' as NavTab,
+  },
+];
 
   // Measure icon vertical offsets for flyout alignment
   const measureOffsets = useCallback(() => {
@@ -147,19 +160,12 @@ export function Sidebar({
             style={{ height: HEADER_HEIGHT }}
             title="InterTrain Home"
           >
-            <div className="w-[50px] h-[50px] rounded-2xl bg-gradient-to-tr from-blue-600/30 via-blue-500/20 to-transparent border border-blue-500/40 flex items-center justify-center text-white shadow-lg group-hover:scale-105 group-hover:border-blue-400 transition-all">
-              <svg
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2.2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                className="w-6 h-6 text-white"
-              >
-                <path d="M22 10v6M2 10l10-5 10 5-10 5z" />
-                <path d="M6 12v5c3 3 9 3 12 0v-5" />
-              </svg>
+            <div className="w-[52px] h-[52px] rounded-2xl bg-[#0B0F19] border border-blue-500/40 flex items-center justify-center shadow-lg group-hover:scale-105 group-hover:border-blue-400 transition-all overflow-hidden p-0.5">
+              <img
+                src={intertrainLogo}
+                alt="InterTrain Logo"
+                className="w-full h-full object-cover rounded-[14px]"
+              />
             </div>
           </button>
 
@@ -327,9 +333,7 @@ export function Sidebar({
                   `}
                 >
                   <div className="flex items-center gap-2">
-                    {'icon' in sub && sub.icon && (
-                      <sub.icon className="w-3.5 h-3.5 text-slate-400" />
-                    )}
+                    {sub.icon && React.createElement(sub.icon, { className: 'w-3.5 h-3.5 text-slate-400' })}
                     <span>{sub.label}</span>
                   </div>
                   <ChevronRight className="w-3 h-3 text-slate-500 opacity-60" />
@@ -360,19 +364,12 @@ export function Sidebar({
           {/* Header */}
           <div className="flex items-center justify-between px-5" style={{ height: HEADER_HEIGHT }}>
             <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-blue-600/30 border border-blue-500/40 flex items-center justify-center text-white">
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2.2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  className="w-5 h-5 text-white"
-                >
-                  <path d="M22 10v6M2 10l10-5 10 5-10 5z" />
-                  <path d="M6 12v5c3 3 9 3 12 0v-5" />
-                </svg>
+              <div className="w-10 h-10 rounded-xl bg-[#0B0F19] border border-blue-500/40 flex items-center justify-center overflow-hidden p-0.5 shadow-sm">
+                <img
+                  src={intertrainLogo}
+                  alt="InterTrain Logo"
+                  className="w-full h-full object-cover rounded-lg"
+                />
               </div>
               <div>
                 <div className="text-base font-bold text-white leading-none">InterTrain</div>

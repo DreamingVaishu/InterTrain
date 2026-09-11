@@ -54,11 +54,3 @@ export interface PracticeTrack {
   };
   questions: string[];
 }
-
-export interface LiveNote {
-  id: string;
-  speaker: string;
-  text: string;
-  timestamp: string;
-  type: 'question' | 'note' | 'tip';
-}

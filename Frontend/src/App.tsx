@@ -3,16 +3,16 @@ import { Menu } from 'lucide-react';
 import { NavTab, HistoryFolder, PracticeTrack, QuestionResponse, AttemptReview, InterviewConfig } from './types';
 import { INITIAL_FOLDERS, PRACTICE_TRACKS } from './data/mockData';
 import { Sidebar } from './components/Sidebar';
-import { HomeView } from './components/HomeView';
-import { PracticesView } from './components/PracticesView';
-import { AttemptReviewView } from './components/AttemptReviewView';
-import { LivePracticeView } from './components/LivePracticeView';
-import { InterviewSetupView } from './components/InterviewSetupView';
-import { AnalyticsView } from './components/AnalyticsView';
-import { BestPracticesView } from './components/BestPracticesView';
-import { HistoryView } from './components/HistoryView';
+import { HomeView } from './views/HomeView';
+import { PracticesView } from './views/PracticesView';
+import { AttemptReviewView } from './views/AttemptReviewView';
+import { LivePracticeView } from './views/LivePracticeView';
+import { InterviewSetupView } from './views/InterviewSetupView';
+import { AnalyticsView } from './views/AnalyticsView';
+import { BestPracticesView } from './views/BestPracticesView';
+import { HistoryView } from './views/HistoryView';
 import { SettingsModal } from './components/SettingsModal';
-import LoginPage, { UserAuthData } from './components/auth/LoginPage';
+import LoginPage, { UserAuthData } from './views/auth/LoginPage';
 import { generateSessionId, extractSessionIdFromUrl } from './utils/session';
 
 export default function App() {
@@ -52,7 +52,6 @@ export default function App() {
 
   const [selectedFolderId, setSelectedFolderId] = useState<string>('devops');
   const [activeTrack, setActiveTrack] = useState<PracticeTrack>(PRACTICE_TRACKS[0]);
-  const [sidebarSearch, setSidebarSearch] = useState('');
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
@@ -278,8 +277,6 @@ export default function App() {
           selectedFolderId={currentTab === 'review' ? selectedFolderId : undefined}
           onSelectFolder={handleSelectFolder}
           onOpenSettings={() => setIsSettingsOpen(true)}
-          sidebarSearch={sidebarSearch}
-          setSidebarSearch={setSidebarSearch}
           isMobileOpen={isMobileSidebarOpen}
           onCloseMobile={() => setIsMobileSidebarOpen(false)}
           currentUser={currentUser}

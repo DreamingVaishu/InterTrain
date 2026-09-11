@@ -1,2 +1,71 @@
-# Auto detect text files and perform LF normalization
-* text=auto
+# ==============================================================================
+# InterTrain .gitattributes
+# Git configuration for line endings, binary assets, and diff handling.
+# ==============================================================================
+
+# Auto-detect text files and perform LF normalization
+* text=auto eol=lf
+
+# Explicitly declare text files you want to always be normalized and converted to LF on checkout
+*.ts text eol=lf
+*.tsx text eol=lf
+*.js text eol=lf
+*.jsx text eol=lf
+*.json text eol=lf
+*.html text eol=lf
+*.css text eol=lf
+*.scss text eol=lf
+*.md text eol=lf
+*.py text eol=lf
+*.txt text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.sh text eol=lf
+
+# Windows-specific scripts must keep CRLF line endings
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# ------------------------------------------------------------------------------
+# Binary Assets (Prevent git from modifying or corrupting line endings)
+# ------------------------------------------------------------------------------
+# Images
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.bmp binary
+*.svg text eol=lf
+
+# Audio & Media
+*.wav binary
+*.mp3 binary
+*.ogg binary
+*.m4a binary
+*.mp4 binary
+*.webm binary
+
+# Fonts
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary
+*.otf binary
+
+# Documents & Archives
+*.pdf binary
+*.zip binary
+*.tar.gz binary
+*.tgz binary
+*.rar binary
+*.7z binary
+
+# ------------------------------------------------------------------------------
+# Generated / Large File Diff Handling
+# ------------------------------------------------------------------------------
+package-lock.json -diff
+*.min.js -diff linguist-generated=true
+*.min.css -diff linguist-generated=true

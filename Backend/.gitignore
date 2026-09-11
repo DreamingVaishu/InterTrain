@@ -1,5 +1,48 @@
+# ==============================================================================
+# InterTrain Backend .gitignore
+# ==============================================================================
+
+# Sensitive Environment Variables & API Keys
 .env
+.env.*
+*.env
+!.env.example
+
+# Secrets & Credentials
+*.pem
+*.key
+*.cert
+credentials.json
+client_secret*.json
+
+# Python Bytecode & Caches
 __pycache__/
+*.py[cod]
+*$py.class
+*.so
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Virtual Environments
+venv/
+.venv/
+env/
+ENV/
+
+# Runtime Generated Session Data & Audio
 sections/
 audio/
-*.pyc
+*.wav
+*.mp3
+*.ogg
+
+# SQLite / Database files
+*.db
+*.sqlite
+*.sqlite3
+
+# Logs
+*.log

@@ -1,7 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import {
   History,
-  Search,
   Calendar,
   CheckCircle2,
   TrendingUp,
@@ -32,7 +31,6 @@ export function HistoryView({
   onSelectFolder,
   onStartPractice,
 }: HistoryViewProps) {
-  const [searchQuery, setSearchQuery] = useState('');
   const [selectedFilter, setSelectedFilter] = useState<string>('all');
 
   // Gather all attempts across all folders
@@ -53,21 +51,13 @@ export function HistoryView({
 
   // Filtered attempts
   const filteredAttempts = useMemo(() => {
-    return allAttempts.filter(({ folderId, folderTitle, attempt }) => {
+    return allAttempts.filter(({ folderId }) => {
       if (selectedFilter !== 'all' && folderId !== selectedFilter) {
         return false;
       }
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        return (
-          folderTitle.toLowerCase().includes(q) ||
-          attempt.role.toLowerCase().includes(q) ||
-          attempt.finalSummary.toLowerCase().includes(q)
-        );
-      }
       return true;
     });
-  }, [allAttempts, selectedFilter, searchQuery]);
+  }, [allAttempts, selectedFilter]);
 
   // Calculate high-level summary metrics
   const totalAttempts = allAttempts.length;
@@ -84,22 +74,8 @@ export function HistoryView({
 
   return (
     <div className="min-h-screen bg-[#F4F6F9] text-slate-900 pb-16">
-      {/* ── TOP HEADER BAR ── */}
-      <header className="sticky top-0 z-20 bg-[#F4F6F9]/90 backdrop-blur-md px-6 lg:px-10 py-4 flex items-center justify-between gap-4 border-b border-slate-200/80">
-        <div className="relative flex-1 max-w-2xl">
-          <Search className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search interview history by role, topic, or feedback..."
-            className="w-full bg-white text-slate-800 placeholder-slate-400 text-sm pl-11 pr-4 py-2.5 rounded-2xl border border-slate-200/90 shadow-xs focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition-all"
-          />
-        </div>
-      </header>
-
       {/* ── MAIN HISTORY CONTAINER ── */}
-      <main className="px-6 lg:px-10 pt-6 space-y-7 max-w-7xl mx-auto">
+      <main className="px-6 lg:px-10 py-8 lg:py-10 space-y-7 max-w-7xl mx-auto">
         {/* Top Header Card */}
         <div className="bg-white rounded-3xl border border-slate-200/80 shadow-xs p-6 md:p-8">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">

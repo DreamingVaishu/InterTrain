@@ -1,7 +1,5 @@
-import React, { useState } from 'react';
+import React from 'react';
 import {
-  Search,
-  Bell,
   Plus,
   BarChart2,
   ArrowRight,
@@ -21,7 +19,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { HistoryFolder } from '../types';
-import { RobotAssistant } from './RobotAssistant';
+import { RobotAssistant } from '../components/RobotAssistant';
 
 interface HomeViewProps {
   folders: HistoryFolder[];
@@ -40,17 +38,7 @@ export function HomeView({
   onViewProgress,
   userName,
 }: HomeViewProps) {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [hasNotifications, setHasNotifications] = useState(true);
   const displayName = userName || 'Billu Badmash';
-
-  // Extract initials
-  const initials = displayName
-    .split(' ')
-    .map((n) => n[0])
-    .join('')
-    .toUpperCase()
-    .slice(0, 2);
 
   // Black, White & Blue combo tracks for the Explore section with uniform styling
   const exploreTracks = [
@@ -110,48 +98,8 @@ export function HomeView({
 
   return (
     <div className="min-h-screen bg-[#F4F6F9] text-slate-900 pb-16">
-      {/* ── TOP SEARCH & HEADER BAR ── */}
-      <header className="sticky top-0 z-20 bg-[#F4F6F9]/90 backdrop-blur-md px-6 lg:px-10 py-4 flex items-center justify-between gap-4 border-b border-slate-200/80">
-        {/* Search Input Box */}
-        <div className="relative flex-1 max-w-2xl">
-          <Search className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search for topics, tools, or practice sets..."
-            className="w-full bg-white text-slate-800 placeholder-slate-400 text-sm pl-11 pr-4 py-2.5 rounded-2xl border border-slate-200/90 shadow-xs focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition-all"
-          />
-        </div>
-
-        {/* Right Header Actions */}
-        <div className="flex items-center gap-3 shrink-0">
-          {/* Notification Bell */}
-          <button
-            onClick={() => setHasNotifications(false)}
-            className="relative p-2.5 rounded-2xl bg-white border border-slate-200/90 text-slate-600 hover:text-slate-900 hover:border-slate-300 shadow-xs transition-colors"
-            title="Notifications"
-            aria-label="Notifications"
-          >
-            <Bell className="w-4 h-4" />
-            {hasNotifications && (
-              <span className="absolute top-2 right-2 w-2 h-2 rounded-full bg-red-500 ring-2 ring-white" />
-            )}
-          </button>
-
-          {/* User Avatar Circle */}
-          <button
-            onClick={onViewProgress}
-            className="w-10 h-10 rounded-2xl bg-slate-900 text-white font-bold flex items-center justify-center text-xs tracking-wider shadow-xs hover:bg-blue-600 transition-colors border border-slate-800"
-            title={displayName}
-          >
-            {initials}
-          </button>
-        </div>
-      </header>
-
       {/* ── MAIN DASHBOARD CONTAINER ── */}
-      <main className="px-6 lg:px-10 pt-6 space-y-7 max-w-7xl mx-auto">
+      <main className="px-6 lg:px-10 py-8 lg:py-10 space-y-7 max-w-7xl mx-auto">
         {/* ── 1. WELCOME HERO BANNER ── */}
         <div className="relative bg-white rounded-3xl border border-slate-200/80 shadow-xs overflow-hidden p-6 md:p-8 lg:p-10">
           {/* Subtle tech grid background styling */}
