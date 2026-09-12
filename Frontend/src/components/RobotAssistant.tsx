@@ -12,6 +12,7 @@ export function RobotAssistant({ className = '', size = 260, withLaptop = false 
       className={`relative flex items-center justify-center select-none ${className}`}
       style={{ width: size, height: size }}
     >
+      {/* hello */}
       {/* Ambient Blue Radial Glow Behind Robot */}
       <div className="absolute inset-0 rounded-full bg-blue-500/15 blur-2xl transform scale-90 pointer-events-none" />
 
