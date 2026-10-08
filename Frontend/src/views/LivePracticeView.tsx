@@ -7,28 +7,18 @@ import {
   PhoneOff,
   ArrowLeft,
   Clock,
-  ChevronRight,
-  ChevronDown,
-  ChevronUp,
   Code2,
   Settings,
-  HelpCircle,
   CheckCircle2,
-  Sparkles,
   Play,
   Terminal,
-  Send,
   Volume2,
   Maximize2,
-  Bot,
-  X,
-  ShieldCheck,
-  RefreshCw,
-  MoreHorizontal,
 } from 'lucide-react';
 import { PracticeTrack, QuestionResponse } from '../types';
-import { startLiveInterview, submitLiveAnswer } from '../services/liveInterview';
-import { runCode as apiRunCode, evaluateCode as apiEvaluateCode, type EvaluateCodeResult } from '../services/codeExecution';
+import { completeLiveInterview, startLiveInterview, submitLiveAnswer, type InterviewEvaluation } from '../services/liveInterview';
+import { runCode as apiRunCode, submitCode as apiSubmitCode, type CodeReview, type CodingProblem } from '../services/codeExecution';
+import { MonacoEditor } from '../components/MonacoEditor';
 
 interface LivePracticeViewProps {
   track: PracticeTrack;
@@ -44,49 +34,12 @@ interface LivePracticeViewProps {
     code: string;
     language: string;
     sessionId?: string;
+    evaluation?: InterviewEvaluation;
+    codeProblem?: CodingProblem;
+    codeReview?: CodeReview;
   }) => void;
   onExit: () => void;
 }
-
-interface AIService {
-  id: string;
-  name: string;
-  company: string;
-  role: string;
-  model: string;
-  color: string;
-  ringColor: string;
-}
-
-const AI_SERVICES: AIService[] = [
-  {
-    id: 'gemini',
-    name: 'Gemini 1.5 Pro',
-    company: 'Google AI',
-    role: 'Lead Evaluator',
-    model: 'Gemini 1.5 Pro',
-    color: '#1a73e8',
-    ringColor: 'border-blue-500 shadow-blue-500/20 ring-1 ring-blue-500/30',
-  },
-  {
-    id: 'claude',
-    name: 'Claude 3.5 Sonnet',
-    company: 'Anthropic',
-    role: 'System Architect',
-    model: 'Claude 3.5 Sonnet',
-    color: '#ea580c',
-    ringColor: 'border-amber-500 shadow-amber-500/20 ring-1 ring-amber-500/30',
-  },
-  {
-    id: 'openai',
-    name: 'GPT-4o Omni',
-    company: 'OpenAI',
-    role: 'Algorithms Specialist',
-    model: 'GPT-4o',
-    color: '#10b981',
-    ringColor: 'border-emerald-500 shadow-emerald-500/20 ring-1 ring-emerald-500/30',
-  },
-];
 
 export function LivePracticeView({
   track,
@@ -107,22 +60,20 @@ export function LivePracticeView({
   // Media States
   const [isMuted, setIsMuted] = useState(initialMicMuted);
   const [isVideoStopped, setIsVideoStopped] = useState(!initialCameraOn);
-  const [isHandRaised, setIsHandRaised] = useState(false);
-  const [isScreenSharing, setIsScreenSharing] = useState(false);
 
   // Custom Input and Console Tabs for Code Editor
   const [customInputEnabled, setCustomInputEnabled] = useState(false);
   const [customInputText, setCustomInputText] = useState('nums = [2, 7, 11, 15]\ntarget = 9');
   const [consoleTab, setConsoleTab] = useState<'console' | 'testcases'>('console');
   // Track code evaluation results
-  const [lastEvaluation, setLastEvaluation] = useState<EvaluateCodeResult | null>(null);
+  const [lastEvaluation, setLastEvaluation] = useState<CodeReview | null>(null);
+  const [codingProblem, setCodingProblem] = useState<CodingProblem | null>(null);
 
   const [submissions, setSubmissions] = useState<
     Array<{ id: string; status: string; runtime: string; memory: string; timestamp: string; score?: number }>
   >([]);
 
   // Constraints accordion
-  const [constraintsOpen, setConstraintsOpen] = useState(true);
 
   // Webcam stream state
   const [mediaStream, setMediaStream] = useState<MediaStream | null>(null);
@@ -158,8 +109,11 @@ export function LivePracticeView({
   const recorderRef = useRef<MediaRecorder | null>(null);
   const sttStreamRef = useRef<MediaStream | null>(null);
   const answerBufferRef = useRef('');
+  const finalTranscriptRef = useRef('');
+  const partialTranscriptRef = useRef('');
   const interviewStartedRef = useRef(false);
   const processingAnswerRef = useRef(false);
+  const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Code editor state
   const [selectedLanguage, setSelectedLanguage] = useState(track.defaultCode.language || 'python');
@@ -297,31 +251,97 @@ export function LivePracticeView({
   const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
   const stopSTT = () => {
-    if (recorderRef.current && recorderRef.current.state !== 'inactive') recorderRef.current.stop();
+    if (silenceTimerRef.current) {
+      clearTimeout(silenceTimerRef.current);
+      silenceTimerRef.current = null;
+    }
+
+    if (recorderRef.current && recorderRef.current.state !== 'inactive') {
+      recorderRef.current.stop();
+    }
     recorderRef.current = null;
+
     if (sttStreamRef.current) {
       sttStreamRef.current.getTracks().forEach((track) => track.stop());
       sttStreamRef.current = null;
     }
+
     if (sttSocketRef.current) {
-      try { sttSocketRef.current.send(JSON.stringify({ type: 'stop' })); } catch {}
+      try {
+        sttSocketRef.current.send(JSON.stringify({ type: 'stop' }));
+      } catch {
+        // The socket may already be closed.
+      }
       sttSocketRef.current.close();
       sttSocketRef.current = null;
     }
   };
 
+  const sendAnswerToBackend = async (answer: string) => {
+    if (!sessionId || processingAnswerRef.current || !answer.trim()) return;
+    processingAnswerRef.current = true;
+    setInterviewStatus('processing');
+    stopSTT();
+
+    try {
+      const result = await submitLiveAnswer(sessionId, answer.trim());
+      const newQA: QuestionResponse = {
+        id: `${sessionId}-${interviewRound}`,
+        question: liveQuestion,
+        response: answer.trim(),
+      };
+      const allQuestions = [...completedQuestions, newQA];
+      setCompletedQuestions(allQuestions);
+
+      if (result.round_type === 'coding') {
+        const problem = result.coding_problem as CodingProblem;
+        setInterviewRound(5);
+        setCodingProblem(problem);
+        setLiveQuestion(problem.question);
+        setInterviewerSubtitle('Practical coding round. Solve the problem in the editor.');
+        setCodeContent(problem.starter_code);
+        setSelectedLanguage(problem.language || 'python');
+        setLiveTranscript('');
+        setLayoutMode('code');
+        setInterviewStatus('listening');
+        return;
+      }
+
+      setInterviewRound(result.round);
+      setLiveQuestion(result.question || '');
+      setInterviewerSubtitle(result.question || '');
+      setAiAudioUrl(`${API_BASE}${result.audio_url || ''}`);
+      setLiveTranscript('');
+      answerBufferRef.current = '';
+      finalTranscriptRef.current = '';
+      partialTranscriptRef.current = '';
+    } catch (error) {
+      console.error(error);
+      setInterviewError(error instanceof Error ? error.message : 'Unable to process your answer.');
+      setInterviewStatus('error');
+    } finally {
+      processingAnswerRef.current = false;
+    }
+  };
+
   const startListening = async () => {
-    if (!sessionId || isMuted || interviewStatus === 'completed' || processingAnswerRef.current) return;
+    if (!sessionId || isMuted || interviewStatus === 'completed' || processingAnswerRef.current || interviewRound === 5) return;
+
     try {
       stopSTT();
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       sttStreamRef.current = stream;
+
       const wsProtocol = API_BASE.startsWith('https') ? 'wss' : 'ws';
       const wsHost = API_BASE.replace(/^https?:\/\//, '');
       const socket = new WebSocket(`${wsProtocol}://${wsHost}/ws/live-interview/${sessionId}`);
       sttSocketRef.current = socket;
+
       answerBufferRef.current = '';
+      finalTranscriptRef.current = '';
+      partialTranscriptRef.current = '';
       setLiveTranscript('');
+      setInterviewError('');
 
       socket.onopen = () => {
         setInterviewStatus('listening');
@@ -329,72 +349,63 @@ export function LivePracticeView({
         const mimeType = MediaRecorder.isTypeSupported(preferred) ? preferred : 'audio/webm';
         const recorder = new MediaRecorder(stream, { mimeType });
         recorderRef.current = recorder;
+
         recorder.ondataavailable = (event) => {
           if (event.data.size > 0 && socket.readyState === WebSocket.OPEN) {
             event.data.arrayBuffer().then((buffer) => socket.send(buffer));
           }
         };
+
         recorder.start(250);
       };
 
-      socket.onmessage = async (event) => {
+      socket.onmessage = (event) => {
         const data = JSON.parse(event.data);
-        if (data.type === 'transcript_partial') {
-          answerBufferRef.current = data.transcript || '';
-          setLiveTranscript(answerBufferRef.current);
-        } else if (data.type === 'transcript_final') {
-          const text = (data.transcript || answerBufferRef.current).trim();
-          if (!text || processingAnswerRef.current) return;
-          answerBufferRef.current = text;
-          setLiveTranscript(text);
-          processingAnswerRef.current = true;
-          setInterviewStatus('processing');
-          stopSTT();
-          try {
-            const result = await submitLiveAnswer(sessionId, text);
-            const newQA: QuestionResponse = {
-              id: `${sessionId}-${interviewRound}`,
-              question: liveQuestion,
-              response: text,
-            };
-            const allQuestions = [...completedQuestions, newQA];
-            setCompletedQuestions(allQuestions);
-            if (result.completed) {
-              setInterviewRound(5);
-              setInterviewStatus('completed');
-              setInterviewerSubtitle('Interview completed. Thank you for your time.');
-              onEndSession({
-                track,
-                duration: formatTime(1477 - secondsRemaining),
-                questions: allQuestions,
-                code: codeContent,
-                language: selectedLanguage,
-                sessionId,
-              });
-            } else {
-              setInterviewRound(result.round);
-              setLiveQuestion(result.question || '');
-              setInterviewerSubtitle(result.question || '');
-              setAiAudioUrl(`${API_BASE}${result.audio_url || ''}`);
-              setLiveTranscript('');
-              answerBufferRef.current = '';
-            }
-          } catch (error) {
-            console.error(error);
-            setInterviewError(error instanceof Error ? error.message : 'Unable to process your answer.');
-            setInterviewStatus('error');
-          } finally {
-            processingAnswerRef.current = false;
+
+        if (data.type === 'transcript') {
+          const text = (data.transcript || '').trim();
+          if (!text) return;
+
+          // A new piece of speech means the candidate is still answering.
+          if (silenceTimerRef.current) {
+            clearTimeout(silenceTimerRef.current);
+            silenceTimerRef.current = null;
+          }
+
+          if (data.is_final) {
+            // Keep every final Deepgram segment so a complete paragraph is preserved.
+            finalTranscriptRef.current = `${finalTranscriptRef.current} ${text}`.trim();
+            partialTranscriptRef.current = '';
+          } else {
+            partialTranscriptRef.current = text;
+          }
+
+          const completeText = `${finalTranscriptRef.current} ${partialTranscriptRef.current}`.trim();
+          answerBufferRef.current = completeText;
+          setLiveTranscript(completeText);
+
+          // Deepgram's speech_final means the candidate stopped speaking.
+          // Wait a little before submitting so a short pause inside a paragraph
+          // does not cut the answer too early. If the candidate stays silent,
+          // the next question starts automatically.
+          if (data.speech_final && finalTranscriptRef.current.trim()) {
+            silenceTimerRef.current = setTimeout(() => {
+              silenceTimerRef.current = null;
+              const answer = finalTranscriptRef.current.trim();
+              if (answer && !processingAnswerRef.current) {
+                void sendAnswerToBackend(answer);
+              }
+            }, 1800);
           }
         } else if (data.type === 'error') {
-          setInterviewError(data.message || 'Deepgram STT error.');
+          setInterviewError(data.message || 'Speech-to-text error.');
           setInterviewStatus('error');
           stopSTT();
         }
       };
 
       socket.onerror = () => {
-        setInterviewError('Unable to connect to Deepgram STT.');
+        setInterviewError('Unable to connect to speech recognition. Check the Deepgram API key and backend.');
         setInterviewStatus('error');
         stopSTT();
       };
@@ -416,7 +427,7 @@ export function LivePracticeView({
       setInterviewError('');
     } catch (error) {
       console.warn('Browser blocked autoplay:', error);
-      setInterviewError('Browser blocked AI audio. Use Play AI question once to continue.');
+      setInterviewError('Browser blocked question audio. Use Replay question once to continue.');
     }
   };
 
@@ -434,7 +445,7 @@ export function LivePracticeView({
         setAiAudioUrl(url);
       } catch (error) {
         console.error(error);
-        setInterviewError(error instanceof Error ? error.message : 'Unable to start the AI interview.');
+        setInterviewError(error instanceof Error ? error.message : 'Unable to start the interview.');
         setInterviewStatus('error');
       }
     };
@@ -454,7 +465,7 @@ export function LivePracticeView({
     const audio = audioRef.current;
     if (!audio) return;
     const onEnded = () => {
-      if (interviewStatus === 'speaking') {
+      if (interviewStatus === 'speaking' && interviewRound < 5) {
         setActiveSpeaker('candidate');
         void startListening();
       }
@@ -503,53 +514,55 @@ export function LivePracticeView({
     }
   };
 
-  // Submit Code — real AI code evaluation via backend
+  // Submit the final coding round to Wandbox, review it with AI, then finish the interview.
   const handleSubmitCode = async () => {
-    if (isExecuting || !sessionId) return;
+    if (isExecuting || !sessionId || !codingProblem) return;
     setIsExecuting(true);
-    setCodeOutput('Submitting to AI evaluator...');
+    setCodeOutput('Running your solution on Wandbox...');
+
     try {
-      const evaluation = await apiEvaluateCode(
-        sessionId,
-        codeContent,
-        selectedLanguage,
-        liveQuestion,
-      );
-      setLastEvaluation(evaluation);
-      const verdictIcon = evaluation.verdict === 'Accepted' ? '✓' : evaluation.verdict === 'Rejected' ? '✗' : '△';
-      const lines: string[] = [
-        `${verdictIcon} Verdict: ${evaluation.verdict} (Score: ${evaluation.score}/100)`,
-        ``,
-        `${evaluation.summary}`,
-        ``,
-        `Time Complexity:  ${evaluation.time_complexity}`,
-        `Space Complexity: ${evaluation.space_complexity}`,
-        `Estimated Runtime: ${evaluation.runtime_estimate}`,
-        `Estimated Memory:  ${evaluation.memory_estimate}`,
+      const result = await apiSubmitCode(sessionId, codeContent, selectedLanguage);
+      setLastEvaluation(result.review);
+
+      const lines = [
+        `Verdict: ${result.review.verdict} (${result.review.score}/100)`,
+        `Tests: ${result.review.tests_passed}/${result.review.tests_total}`,
+        '',
+        result.review.summary,
+        '',
+        `Time Complexity: ${result.review.time_complexity}`,
+        `Space Complexity: ${result.review.space_complexity}`,
       ];
-      if (evaluation.strengths.length > 0) {
-        lines.push('', 'Strengths:');
-        evaluation.strengths.forEach((s) => lines.push('  ✓ ' + s));
-      }
-      if (evaluation.improvements.length > 0) {
-        lines.push('', 'Suggestions:');
-        evaluation.improvements.forEach((s) => lines.push('  → ' + s));
-      }
+      result.results.forEach((test, index) => {
+        lines.push('', `Test ${index + 1}: ${test.passed ? 'Passed' : 'Failed'}`);
+        lines.push(`Expected: ${test.expected_output}`);
+        lines.push(`Output: ${test.stdout || test.stderr || test.compile_output || '(no output)'}`);
+      });
       setCodeOutput(lines.join('\n'));
-      setSubmissions((prev) => [
-        {
-          id: 'sub-' + Date.now(),
-          status: evaluation.verdict,
-          runtime: evaluation.runtime_estimate,
-          memory: evaluation.memory_estimate,
-          timestamp: 'Just now',
-          score: evaluation.score,
-        },
-        ...prev,
-      ]);
       setActiveTab('submissions');
+
+      setInterviewerSubtitle('Preparing your final interview result...');
+      const evaluation = await completeLiveInterview(sessionId);
+      setInterviewStatus('completed');
+      setIsTimerRunning(false);
+
+      onEndSession({
+        track,
+        duration: formatTime(1477 - secondsRemaining),
+        questions: [...completedQuestions, {
+          id: `${sessionId}-5`,
+          question: codingProblem.question,
+          response: codeContent,
+        }],
+        code: codeContent,
+        language: selectedLanguage,
+        sessionId,
+        evaluation,
+        codeProblem: result.problem,
+        codeReview: result.review,
+      });
     } catch (err) {
-      setCodeOutput('Error during AI evaluation: ' + (err instanceof Error ? err.message : String(err)));
+      setCodeOutput('Error during code submission: ' + (err instanceof Error ? err.message : String(err)));
     } finally {
       setIsExecuting(false);
     }
@@ -589,7 +602,7 @@ export function LivePracticeView({
 
             <div className="hidden md:flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-semibold">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              <span>Multi-Agent Live Session • Round {interviewRound || 1} of 5</span>
+              <span>Live Interview • Round {interviewRound || 1} of 5</span>
             </div>
           </div>
 
@@ -648,9 +661,6 @@ export function LivePracticeView({
                         <span className="text-xs font-bold text-white leading-none">
                           Moderator
                         </span>
-                        <span className="text-[10px] text-neutral-300 leading-none">
-                          InterTrain AI
-                        </span>
                       </div>
                     </div>
 
@@ -681,9 +691,6 @@ export function LivePracticeView({
                       <div className="flex flex-col leading-tight">
                         <span className="text-xs font-bold text-white leading-none">
                           Technical Interviewer
-                        </span>
-                        <span className="text-[10px] text-neutral-300 leading-none">
-                          InterTrain AI
                         </span>
                       </div>
                     </div>
@@ -786,9 +793,6 @@ export function LivePracticeView({
                       <div className="flex flex-col leading-tight">
                         <span className="text-xs font-bold text-white leading-none">
                           Observer
-                        </span>
-                        <span className="text-[10px] text-neutral-300 leading-none">
-                          InterTrain AI
                         </span>
                       </div>
                     </div>
@@ -908,101 +912,30 @@ export function LivePracticeView({
                   <div className="flex-1 relative rounded-xl overflow-hidden bg-slate-900 border border-slate-800 shadow-md min-h-0 group">
                     <img
                       src="/avatars/moderator.jpg"
-                      alt="Moderator AI"
+                      alt="Moderator"
                       className="w-full h-full object-cover"
                     />
 
-                    {/* Badge Bottom Left: Animated Waveform + Name + Organization */}
-                    <div className="absolute bottom-2.5 left-2.5 flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-black/75 backdrop-blur-md border border-white/10 shadow-md">
-                      <div className="flex items-center gap-0.5 h-3.5 text-cyan-400">
-                        <span className="w-0.5 h-2 bg-cyan-400 rounded-full animate-pulse" />
-                        <span className="w-0.5 h-3.5 bg-cyan-400 rounded-full animate-pulse delay-75" />
-                        <span className="w-0.5 h-1.5 bg-cyan-400 rounded-full animate-pulse delay-150" />
-                      </div>
-                      <div className="flex flex-col leading-tight">
-                        <span className="text-[11px] font-bold text-white leading-none">
-                          Moderator
-                        </span>
-                        <span className="text-[9px] text-slate-300 leading-none mt-0.5">
-                          InterTrain AI
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Badge Bottom Right: 3 Dots Menu */}
-                    <button
-                      type="button"
-                      className="absolute bottom-2.5 right-2.5 w-7 h-7 rounded-lg bg-black/70 hover:bg-black/90 backdrop-blur-md border border-white/10 text-white flex items-center justify-center transition-colors cursor-pointer"
-                      title="AI settings"
-                    >
-                      <MoreHorizontal className="w-3.5 h-3.5 text-slate-300" />
-                    </button>
                   </div>
 
                   {/* 2. TECHNICAL INTERVIEWER AI CAMERA */}
                   <div className="flex-1 relative rounded-xl overflow-hidden bg-slate-900 border border-slate-800 shadow-md min-h-0 group">
                     <img
                       src="/avatars/interviewer.jpg"
-                      alt="Technical Interviewer AI"
+                      alt="Technical Interviewer"
                       className="w-full h-full object-cover"
                     />
 
-                    {/* Badge Bottom Left: Mic + Name + Organization */}
-                    <div className="absolute bottom-2.5 left-2.5 flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-black/75 backdrop-blur-md border border-white/10 shadow-md">
-                      <div className="w-4 h-4 rounded-md bg-neutral-800 flex items-center justify-center text-white">
-                        <Mic className="w-2.5 h-2.5" />
-                      </div>
-                      <div className="flex flex-col leading-tight">
-                        <span className="text-[11px] font-bold text-white leading-none">
-                          Technical Interviewer
-                        </span>
-                        <span className="text-[9px] text-slate-300 leading-none mt-0.5">
-                          InterTrain AI
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Badge Bottom Right: 3 Dots Menu */}
-                    <button
-                      type="button"
-                      className="absolute bottom-2.5 right-2.5 w-7 h-7 rounded-lg bg-black/70 hover:bg-black/90 backdrop-blur-md border border-white/10 text-white flex items-center justify-center transition-colors cursor-pointer"
-                      title="AI settings"
-                    >
-                      <MoreHorizontal className="w-3.5 h-3.5 text-slate-300" />
-                    </button>
                   </div>
 
                   {/* 3. OBSERVER AI CAMERA */}
                   <div className="flex-1 relative rounded-xl overflow-hidden bg-slate-900 border border-slate-800 shadow-md min-h-0 group">
                     <img
                       src="/avatars/observer.jpg"
-                      alt="Observer AI"
+                      alt="Observer"
                       className="w-full h-full object-cover"
                     />
 
-                    {/* Badge Bottom Left: MicOff + Name + Organization */}
-                    <div className="absolute bottom-2.5 left-2.5 flex items-center gap-2 px-2.5 py-1.5 rounded-lg bg-black/75 backdrop-blur-md border border-white/10 shadow-md">
-                      <div className="w-4 h-4 rounded-md bg-red-500/20 flex items-center justify-center text-red-400">
-                        <MicOff className="w-2.5 h-2.5" />
-                      </div>
-                      <div className="flex flex-col leading-tight">
-                        <span className="text-[11px] font-bold text-white leading-none">
-                          Observer
-                        </span>
-                        <span className="text-[9px] text-slate-300 leading-none mt-0.5">
-                          InterTrain AI
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Badge Bottom Right: 3 Dots Menu */}
-                    <button
-                      type="button"
-                      className="absolute bottom-2.5 right-2.5 w-7 h-7 rounded-lg bg-black/70 hover:bg-black/90 backdrop-blur-md border border-white/10 text-white flex items-center justify-center transition-colors cursor-pointer"
-                      title="AI settings"
-                    >
-                      <MoreHorizontal className="w-3.5 h-3.5 text-slate-300" />
-                    </button>
                   </div>
 
                   {/* Return to Camera Conference View Button */}
@@ -1068,33 +1001,12 @@ export function LivePracticeView({
                     </div>
                   </div>
 
-                  {/* Code Editor Body with Line Numbers */}
-                  <div className="flex-1 flex bg-[#0B0F19] overflow-hidden relative">
-                    {/* Line numbers gutter */}
-                    <div className="w-11 py-3 select-none text-right pr-3 font-mono text-[11px] text-slate-600 bg-[#070A10] border-r border-slate-800/80 shrink-0 leading-relaxed">
-                      {Array.from({ length: Math.max(codeContent.split('\n').length, 16) }, (_, i) => (
-                        <div key={i + 1} className="h-5 leading-5">{i + 1}</div>
-                      ))}
-                    </div>
-
-                    {/* Editable textarea */}
-                    <textarea
+                  {/* Monaco code editor */}
+                  <div className="flex-1 min-h-0 bg-[#0B0F19] overflow-hidden">
+                    <MonacoEditor
                       value={codeContent}
-                      onChange={(e) => setCodeContent(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Tab') {
-                          e.preventDefault();
-                          const target = e.currentTarget;
-                          const start = target.selectionStart;
-                          const end = target.selectionEnd;
-                          setCodeContent(codeContent.substring(0, start) + '    ' + codeContent.substring(end));
-                          setTimeout(() => {
-                            target.selectionStart = target.selectionEnd = start + 4;
-                          }, 0);
-                        }
-                      }}
-                      className="flex-1 bg-transparent text-slate-100 font-mono text-xs p-3 focus:outline-none resize-none leading-5 overflow-y-auto whitespace-pre selection:bg-blue-600/40"
-                      spellCheck={false}
+                      language={selectedLanguage}
+                      onChange={setCodeContent}
                     />
                   </div>
 
@@ -1164,7 +1076,7 @@ export function LivePracticeView({
                             <span>Test Cases</span>
                           </button>
                         </div>
-                        <span className="text-[10px] text-slate-500 font-mono">Execution Sandbox</span>
+                        <span className="text-[10px] text-slate-500 font-mono">Code Runner</span>
                       </div>
 
                       {/* Custom Input Field (If Toggled) */}
@@ -1338,19 +1250,27 @@ export function LivePracticeView({
                           className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold shadow-xs transition-all cursor-pointer"
                         >
                           <Volume2 className="w-3.5 h-3.5" />
-                          <span>{interviewStatus === 'speaking' ? 'AI is speaking...' : 'Replay AI question'}</span>
+                          <span>{interviewStatus === 'speaking' ? 'Interviewer is speaking...' : 'Replay question'}</span>
                         </button>
                       )}
                       {liveTranscript && (
-                        <div className="pt-2 border-t border-blue-200/60 text-[11px] text-slate-600">
-                          <span className="font-semibold text-slate-700">Your response: </span>
-                          {liveTranscript}
+                        <div className="pt-2 border-t border-blue-200/60 text-[11px] text-slate-600 space-y-2">
+                          <div>
+                            <span className="font-semibold text-slate-700">Your response: </span>
+                            {liveTranscript}
+                          </div>
+                          {interviewStatus === 'listening' && (
+                            <div className="text-[10px] text-slate-500">
+                              Keep speaking naturally. When you stop, the next question starts automatically.
+                            </div>
+                          )}
+
                         </div>
                       )}
                     </div>
                   ) : (
                     <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-500 text-center">
-                      {interviewStatus === 'starting' ? 'Connecting to AI interviewer...' : 'Waiting for next question...'}
+                      {interviewStatus === 'starting' ? 'Connecting to interviewer...' : 'Waiting for next question...'}
                     </div>
                   )}
 
@@ -1422,7 +1342,7 @@ export function LivePracticeView({
                     ))
                   ) : (
                     <p className="text-xs text-slate-500 text-center py-6">
-                      No submissions yet. Write your code and click "Submit" for AI evaluation.
+                      No submissions yet. Write your code and click "Submit" for evaluation.
                     </p>
                   )}
                 </div>

@@ -29,6 +29,25 @@ export interface AttemptReview {
     conciseness: number;
     overallScore: number;
   };
+  codeProblem?: {
+    question: string;
+    language: string;
+    starter_code: string;
+    test_cases: Array<{ input: string; expected_output: string }>;
+  };
+  codeReview?: {
+    verdict: string;
+    score: number;
+    summary: string;
+    strengths: string[];
+    improvements: string[];
+    time_complexity: string;
+    space_complexity: string;
+    tests_passed: number;
+    tests_total: number;
+  };
+  code?: string;
+  language?: string;
 }
 
 export interface HistoryFolder {

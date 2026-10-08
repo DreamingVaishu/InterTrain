@@ -277,7 +277,7 @@ export function PracticesView({
                   “Practice like you interview.”
                 </p>
                 <p className="text-[10px] text-slate-500 font-medium mt-0.5">
-                  — InterTrain AI
+                  — InterTrain
                 </p>
               </div>
 

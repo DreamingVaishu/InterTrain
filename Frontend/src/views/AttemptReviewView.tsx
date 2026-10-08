@@ -120,6 +120,59 @@ export function AttemptReviewView({
 
             {/* Right Column: InterTrain Final Summery + Results */}
             <div className="lg:col-span-5 space-y-6">
+              {currentAttempt.codeProblem && (
+                <div className="bg-slate-950 text-white rounded-2xl p-6 shadow-md border border-slate-800">
+                  <div className="flex items-center justify-between mb-3">
+                    <h3 className="text-lg font-bold">Coding Problem</h3>
+                    <span className="text-xs px-2.5 py-1 rounded-full bg-slate-800 text-slate-200">
+                      {currentAttempt.language || currentAttempt.codeProblem.language}
+                    </span>
+                  </div>
+                  <p className="text-sm text-slate-200 leading-relaxed whitespace-pre-wrap">
+                    {currentAttempt.codeProblem.question}
+                  </p>
+
+                  {currentAttempt.code && (
+                    <pre className="mt-4 max-h-56 overflow-auto rounded-xl bg-black/50 border border-slate-800 p-3 text-xs text-slate-300 whitespace-pre-wrap">
+                      {currentAttempt.code}
+                    </pre>
+                  )}
+
+                  {currentAttempt.codeReview && (
+                    <div className="mt-4 pt-4 border-t border-slate-800 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold">Code Review</span>
+                        <span className="text-sm font-bold">
+                          {currentAttempt.codeReview.score}/100 · {currentAttempt.codeReview.verdict}
+                        </span>
+                      </div>
+                      <p className="text-xs text-slate-300 leading-relaxed">
+                        {currentAttempt.codeReview.summary}
+                      </p>
+                      <div className="grid grid-cols-2 gap-2 text-xs">
+                        <div className="bg-slate-900 rounded-lg p-2.5">
+                          <span className="text-slate-500 block">Tests</span>
+                          <span className="font-bold">{currentAttempt.codeReview.tests_passed}/{currentAttempt.codeReview.tests_total}</span>
+                        </div>
+                        <div className="bg-slate-900 rounded-lg p-2.5">
+                          <span className="text-slate-500 block">Complexity</span>
+                          <span className="font-bold">{currentAttempt.codeReview.time_complexity} / {currentAttempt.codeReview.space_complexity}</span>
+                        </div>
+                      </div>
+                      {currentAttempt.codeReview.improvements.length > 0 && (
+                        <div>
+                          <p className="text-xs font-bold text-white mb-1.5">Code improvements</p>
+                          <ul className="space-y-1.5 text-xs text-slate-300">
+                            {currentAttempt.codeReview.improvements.map((item, index) => (
+                              <li key={index}>• {item}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
               {/* Dark Slate Blue Final Summary Card from screenshot */}
               <div className="bg-[#26445e] text-white rounded-2xl p-6 shadow-md border border-[#3b6387]/40">
                 {/* Header with graduation cap icon */}

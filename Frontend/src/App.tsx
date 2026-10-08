@@ -14,6 +14,7 @@ import { HistoryView } from './views/HistoryView';
 import { SettingsModal } from './components/SettingsModal';
 import LoginPage, { UserAuthData } from './views/auth/LoginPage';
 import { generateSessionId, extractSessionIdFromUrl } from './utils/session';
+import type { InterviewEvaluation } from './services/liveInterview';
 
 export default function App() {
   const [currentUser, setCurrentUser] = useState<UserAuthData | null>(() => {
@@ -128,6 +129,9 @@ export default function App() {
     code: string;
     language: string;
     sessionId?: string;
+    evaluation?: InterviewEvaluation;
+    codeProblem?: NonNullable<InterviewEvaluation['coding_problem']>;
+    codeReview?: NonNullable<InterviewEvaluation['code_review']>;
   }) => {
     // Reset section URL when session concludes
     setActiveSessionId(null);
@@ -154,20 +158,22 @@ export default function App() {
       title: targetFolder.title,
       questions: completedSession.questions,
       finalSummary:
-        newAttemptNumber > 1
-          ? 'Strong technical agility demonstrated! Clear explanations on algorithmic trade-offs and code structure.'
-          : 'Good foundation with room for improvement in verbal brevity and STAR method structuring.',
-      tips: [
-        'State concrete execution metrics before walking through architecture.',
-        'Keep verbal cadence steady and confident when handling edge cases.',
-        'Well done on the code syntax and test validation pass.',
-      ],
+        completedSession.evaluation?.summary ||
+        'The interview was ended before a final AI evaluation was generated.',
+      tips:
+        completedSession.evaluation?.improvements?.length
+          ? completedSession.evaluation.improvements
+          : ['Complete all five interview rounds to receive a full interview evaluation.'],
       metrics: {
-        confidence: Math.min(95, 75 + newAttemptNumber * 5),
-        technicalAccuracy: 88,
-        conciseness: 82,
-        overallScore: Math.min(96, 80 + newAttemptNumber * 4),
+        confidence: completedSession.evaluation?.communication ?? 0,
+        technicalAccuracy: completedSession.evaluation?.technical_accuracy ?? 0,
+        conciseness: completedSession.evaluation?.conciseness ?? 0,
+        overallScore: completedSession.evaluation?.overall_score ?? 0,
       },
+      codeProblem: completedSession.codeProblem,
+      codeReview: completedSession.codeReview,
+      code: completedSession.code,
+      language: completedSession.language,
     };
 
     setFolders((prevFolders) =>

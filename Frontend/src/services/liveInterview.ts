@@ -1,3 +1,19 @@
+import type { CodingProblem, CodeReview, CodeTestResult } from './codeExecution';
+
+export interface InterviewEvaluation {
+  overall_score: number;
+  technical_accuracy: number;
+  communication: number;
+  conciseness: number;
+  summary: string;
+  strengths: string[];
+  improvements: string[];
+  coding_problem?: CodingProblem;
+  code_submission?: { language: string; code: string };
+  code_execution?: CodeTestResult[];
+  code_review?: CodeReview;
+}
+
 export interface LiveInterviewResult {
   section_id: string;
   round: number;
@@ -5,6 +21,8 @@ export interface LiveInterviewResult {
   question?: string;
   audio_url?: string;
   completed: boolean;
+  round_type?: 'interview' | 'coding';
+  coding_problem?: CodingProblem;
 }
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
@@ -28,6 +46,13 @@ export function startLiveInterview(sectionId: string, subject: string, difficult
   return request<LiveInterviewResult>('/api/live-interview/start', {
     method: 'POST',
     body: JSON.stringify({ section_id: sectionId, subject, difficulty }),
+  });
+}
+
+export function completeLiveInterview(sectionId: string) {
+  return request<InterviewEvaluation>('/api/live-interview/complete', {
+    method: 'POST',
+    body: JSON.stringify({ section_id: sectionId }),
   });
 }
 
