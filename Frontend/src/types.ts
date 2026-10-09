@@ -11,18 +11,27 @@ export interface QuestionResponse {
   question: string;
   response: string;
   feedback?: string;
+  shortFeedback?: string;
   score?: number;
   timeSpent?: string;
+  idealAnswer?: string;
+  keyPoints?: string[];
+  category?: string;
 }
 
 export interface AttemptReview {
   attemptNumber: number;
   date: string;
+  duration?: string;
   role: string;
   title: string;
   questions: QuestionResponse[];
   finalSummary: string;
   tips: string[];
+  strengths?: string[];
+  areasToImprove?: string[];
+  cheerQuote?: string;
+  aiSuggestions?: string[];
   metrics: {
     confidence: number;
     technicalAccuracy: number;

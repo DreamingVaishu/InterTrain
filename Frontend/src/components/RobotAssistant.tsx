@@ -4,15 +4,20 @@ interface RobotAssistantProps {
   className?: string;
   size?: number;
   withLaptop?: boolean;
+  thumbsUp?: boolean;
 }
 
-export function RobotAssistant({ className = '', size = 260, withLaptop = false }: RobotAssistantProps) {
+export function RobotAssistant({
+  className = '',
+  size = 260,
+  withLaptop = false,
+  thumbsUp = false,
+}: RobotAssistantProps) {
   return (
     <div
       className={`relative flex items-center justify-center select-none ${className}`}
       style={{ width: size, height: size }}
     >
-      {/* hello */}
       {/* Ambient Blue Radial Glow Behind Robot */}
       <div className="absolute inset-0 rounded-full bg-blue-500/15 blur-2xl transform scale-90 pointer-events-none" />
 
@@ -278,6 +283,48 @@ export function RobotAssistant({ className = '', size = 260, withLaptop = false 
             {/* Right Hand */}
             <ellipse cx="242" cy="285" rx="12" ry="8" fill="#F1F5F9" stroke="#94A3B8" strokeWidth="1.5" transform="rotate(15 242 285)" />
             <circle cx="242" cy="285" r="4" fill="#38BDF8" opacity="0.6" />
+          </g>
+        )}
+
+        {/* --- OPTIONAL THUMBS UP ARM --- */}
+        {thumbsUp && (
+          <g id="thumbs-up-arm">
+            {/* Upper arm curved upward */}
+            <path
+              d="M250 270 Q285 240 278 185"
+              stroke="#E2E8F0"
+              strokeWidth="15"
+              strokeLinecap="round"
+              fill="none"
+            />
+            <path
+              d="M250 270 Q285 240 278 185"
+              stroke="#2563EB"
+              strokeWidth="10"
+              strokeLinecap="round"
+              fill="none"
+            />
+            {/* Elbow joint accent */}
+            <circle cx="274" cy="230" r="7" fill="#0B111E" stroke="#38BDF8" strokeWidth="2" />
+
+            {/* Hand with Thumbs Up at (278, 175) */}
+            <g transform="translate(278, 175)">
+              {/* Fist */}
+              <rect x="-9" y="-6" width="18" height="20" rx="7" fill="#FFFFFF" stroke="#94A3B8" strokeWidth="1.5" />
+              {/* Finger lines */}
+              <line x1="-5" y1="0" x2="5" y2="0" stroke="#CBD5E1" strokeWidth="1.5" strokeLinecap="round" />
+              <line x1="-5" y1="5" x2="5" y2="5" stroke="#CBD5E1" strokeWidth="1.5" strokeLinecap="round" />
+              {/* Thumb pointing up */}
+              <path
+                d="M-2 -5 L0 -24 Q2 -27 6 -24 L8 -5 Z"
+                fill="#FFFFFF"
+                stroke="#94A3B8"
+                strokeWidth="1.5"
+                strokeLinejoin="round"
+              />
+              {/* Glowing blue accent on thumb */}
+              <circle cx="3" cy="-18" r="2.5" fill="#38BDF8" filter="url(#softBlueGlow)" />
+            </g>
           </g>
         )}
       </svg>

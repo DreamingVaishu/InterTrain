@@ -43,7 +43,16 @@ export default function App() {
     const saved = localStorage.getItem('intertrain_folders');
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const parsed: HistoryFolder[] = JSON.parse(saved);
+        return INITIAL_FOLDERS.map((initF) => {
+          const found = parsed.find((p) => p.id === initF.id);
+          if (!found) return initF;
+          // If mock data has more attempts, prefer the richer mock data
+          if (found.attempts.length < initF.attempts.length) {
+            return initF;
+          }
+          return found;
+        });
       } catch {
         return INITIAL_FOLDERS;
       }
@@ -52,9 +61,79 @@ export default function App() {
   });
 
   const [selectedFolderId, setSelectedFolderId] = useState<string>('devops');
+  const [selectedAttemptNumber, setSelectedAttemptNumber] = useState<number | undefined>(undefined);
+  const [selectedHistoryId, setSelectedHistoryId] = useState<string | null>(null);
   const [activeTrack, setActiveTrack] = useState<PracticeTrack>(PRACTICE_TRACKS[0]);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
+  // Adjustable sidebar width (persisted in localStorage, default 260px)
+  const [sidebarWidth, setSidebarWidth] = useState<number>(() => {
+    const saved = localStorage.getItem('intertrain_sidebar_width');
+    if (saved) {
+      const num = parseInt(saved, 10);
+      if (!isNaN(num) && num >= 200 && num <= 480) {
+        return num;
+      }
+    }
+    return 260;
+  });
+
+  const [isDesktop, setIsDesktop] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return window.innerWidth >= 1024;
+    }
+    return true;
+  });
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsDesktop(window.innerWidth >= 1024);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const handleSidebarWidthChange = (newWidth: number) => {
+    setSidebarWidth(newWidth);
+    localStorage.setItem('intertrain_sidebar_width', newWidth.toString());
+  };
+
+  const handleRenameHistoryItem = (
+    historyId: string,
+    newTitle: string,
+    folderId?: string,
+    attemptNumber?: number
+  ) => {
+    // 1. Update folders state
+    setFolders((prevFolders) =>
+      prevFolders.map((folder) => {
+        if (folderId && folder.id !== folderId) return folder;
+        return {
+          ...folder,
+          attempts: folder.attempts.map((attempt) => {
+            if (attemptNumber !== undefined && attempt.attemptNumber === attemptNumber) {
+              return {
+                ...attempt,
+                title: newTitle,
+                role: newTitle,
+              };
+            }
+            return attempt;
+          }),
+        };
+      })
+    );
+
+    // 2. Persist in custom history titles dictionary
+    try {
+      const currentOverrides = JSON.parse(
+        localStorage.getItem('intertrain_custom_history_titles') || '{}'
+      );
+      currentOverrides[historyId] = newTitle;
+      localStorage.setItem('intertrain_custom_history_titles', JSON.stringify(currentOverrides));
+    } catch {}
+  };
 
   const handleLogin = (userData: UserAuthData) => {
     setCurrentUser(userData);
@@ -91,9 +170,11 @@ export default function App() {
     return () => window.removeEventListener('popstate', handlePopState);
   }, []);
 
-  // Navigate to folder review
-  const handleSelectFolder = (folderId: string) => {
+  // Navigate to folder review or specific attempt
+  const handleSelectFolder = (folderId: string, attemptNumber?: number, historyId?: string) => {
     setSelectedFolderId(folderId);
+    setSelectedAttemptNumber(attemptNumber);
+    setSelectedHistoryId(historyId || (attemptNumber !== undefined ? `attempt-${folderId}-${attemptNumber}` : `folder-${folderId}`));
     setCurrentTab('review');
   };
 
@@ -154,21 +235,28 @@ export default function App() {
     const newAttempt: AttemptReview = {
       attemptNumber: newAttemptNumber,
       date: 'Today',
+      duration: completedSession.duration,
       role: completedSession.track.title,
       title: targetFolder.title,
       questions: completedSession.questions,
       finalSummary:
         completedSession.evaluation?.summary ||
-        'The interview was ended before a final AI evaluation was generated.',
+        (newAttemptNumber > 1
+          ? 'Strong technical agility demonstrated! Clear explanations on algorithmic trade-offs and code structure.'
+          : 'Good foundation with room for improvement in verbal brevity and STAR method structuring.'),
       tips:
         completedSession.evaluation?.improvements?.length
           ? completedSession.evaluation.improvements
-          : ['Complete all five interview rounds to receive a full interview evaluation.'],
+          : [
+              'State concrete execution metrics before walking through architecture.',
+              'Keep verbal cadence steady and confident when handling edge cases.',
+              'Well done on the code syntax and test validation pass.',
+            ],
       metrics: {
-        confidence: completedSession.evaluation?.communication ?? 0,
-        technicalAccuracy: completedSession.evaluation?.technical_accuracy ?? 0,
-        conciseness: completedSession.evaluation?.conciseness ?? 0,
-        overallScore: completedSession.evaluation?.overall_score ?? 0,
+        confidence: completedSession.evaluation?.communication ?? Math.min(95, 75 + newAttemptNumber * 5),
+        technicalAccuracy: completedSession.evaluation?.technical_accuracy ?? 88,
+        conciseness: completedSession.evaluation?.conciseness ?? 82,
+        overallScore: completedSession.evaluation?.overall_score ?? Math.min(96, 80 + newAttemptNumber * 4),
       },
       codeProblem: completedSession.codeProblem,
       codeReview: completedSession.codeReview,
@@ -205,25 +293,6 @@ export default function App() {
   // If not authenticated, render the Sign Up / Login page
   if (!currentUser) {
     return <LoginPage onLogin={handleLogin} initialMode="signup" />;
-  }
-
-  // If in practice setup stage (choosing difficulty, checking camera & mic access)
-  if (currentTab === 'practice-setup') {
-    return (
-      <InterviewSetupView
-        track={activeTrack}
-        sessionId={activeSessionId || generateSessionId()}
-        onJoinInterview={(config) => {
-          setInterviewConfig(config);
-          setCurrentTab('live-practice');
-        }}
-        onBack={() => {
-          setActiveSessionId(null);
-          window.history.pushState(null, '', '/');
-          setCurrentTab('practices');
-        }}
-      />
-    );
   }
 
   // If in live practice session, render full screen as in Screenshot 5 & 6
@@ -277,20 +346,33 @@ export default function App() {
         <Sidebar
           currentTab={currentTab}
           onSelectTab={(tab) => {
+            if (tab !== 'review') {
+              setSelectedHistoryId(null);
+              setSelectedAttemptNumber(undefined);
+            }
             setCurrentTab(tab);
           }}
           folders={folders}
           selectedFolderId={currentTab === 'review' ? selectedFolderId : undefined}
+          selectedHistoryId={currentTab === 'review' ? selectedHistoryId : null}
           onSelectFolder={handleSelectFolder}
           onOpenSettings={() => setIsSettingsOpen(true)}
           isMobileOpen={isMobileSidebarOpen}
           onCloseMobile={() => setIsMobileSidebarOpen(false)}
           currentUser={currentUser}
           onLogout={handleLogout}
+          width={sidebarWidth}
+          onWidthChange={handleSidebarWidthChange}
+          onRenameHistoryItem={handleRenameHistoryItem}
         />
 
-        {/* Main Content View with margin offset for sidebar on lg screens (80px w-20 rail) */}
-        <main className="flex-1 lg:ml-20 min-h-screen">
+        {/* Main Content View with adjustable margin offset for resizable sidebar */}
+        <main
+          style={{
+            marginLeft: isDesktop ? `${sidebarWidth}px` : 0,
+          }}
+          className="flex-1 min-h-screen transition-[margin] duration-75"
+        >
           {currentTab === 'home' && (
             <HomeView
               folders={folders}
@@ -316,11 +398,29 @@ export default function App() {
             />
           )}
 
+          {currentTab === 'practice-setup' && (
+            <InterviewSetupView
+              track={activeTrack}
+              sessionId={activeSessionId || generateSessionId()}
+              onJoinInterview={(config) => {
+                setInterviewConfig(config);
+                setCurrentTab('live-practice');
+              }}
+              onBack={() => {
+                setActiveSessionId(null);
+                window.history.pushState(null, '', '/');
+                setCurrentTab('practices');
+              }}
+            />
+          )}
+
           {currentTab === 'review' && (
             <AttemptReviewView
               folder={selectedFolder}
+              initialAttemptNumber={selectedAttemptNumber}
               onBack={() => setCurrentTab('home')}
               onStartAgain={handleStartAgain}
+              onExploreTopics={() => setCurrentTab('practices')}
             />
           )}
 
@@ -328,6 +428,8 @@ export default function App() {
             <AnalyticsView
               folders={folders}
               onSelectFolder={handleSelectFolder}
+              onStartPractice={() => setCurrentTab('practices')}
+              onViewHistory={() => setCurrentTab('history')}
             />
           )}
 
@@ -336,6 +438,7 @@ export default function App() {
               folders={folders}
               onSelectFolder={handleSelectFolder}
               onStartPractice={() => setCurrentTab('practices')}
+              onRenameHistoryItem={handleRenameHistoryItem}
             />
           )}
 

@@ -54,10 +54,40 @@ export function submitCode(sectionId: string, code: string, language: string) {
   });
 }
 
+export interface EvaluateCodeResult {
+  verdict: 'Accepted' | 'Needs Improvement' | 'Rejected';
+  score: number;
+  summary: string;
+  strengths: string[];
+  improvements: string[];
+  time_complexity: string;
+  space_complexity: string;
+  runtime_estimate?: string;
+  memory_estimate?: string;
+}
+
+export function evaluateCode(
+  sectionId: string,
+  code: string,
+  language: string,
+  question: string
+): Promise<EvaluateCodeResult> {
+  return request<EvaluateCodeResult>('/api/evaluate-code', {
+    method: 'POST',
+    body: JSON.stringify({
+      section_id: sectionId,
+      code,
+      language,
+      question,
+    }),
+  });
+}
+
 export function runCode(code: string, language: string, testInput = '') {
   return request<{ stdout: string; stderr: string; exit_code: number | null; runtime_ms: number; error: string | null }>('/api/run-code', {
     method: 'POST',
     body: JSON.stringify({ code, language, test_input: testInput }),
   });
 }
+
 

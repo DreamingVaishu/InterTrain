@@ -1,6 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import {
   History,
+  Search,
   Calendar,
   CheckCircle2,
   TrendingUp,
@@ -11,13 +12,22 @@ import {
   Clock,
   ChevronRight,
   Filter,
+  Pencil,
+  Check,
+  X,
 } from 'lucide-react';
 import { HistoryFolder, AttemptReview } from '../types';
 
 interface HistoryViewProps {
   folders: HistoryFolder[];
-  onSelectFolder: (folderId: string) => void;
+  onSelectFolder: (folderId: string, attemptNumber?: number, historyId?: string) => void;
   onStartPractice: () => void;
+  onRenameHistoryItem?: (
+    id: string,
+    newTitle: string,
+    folderId?: string,
+    attemptNumber?: number
+  ) => void;
 }
 
 interface FlattenedAttempt {
@@ -30,8 +40,12 @@ export function HistoryView({
   folders,
   onSelectFolder,
   onStartPractice,
+  onRenameHistoryItem,
 }: HistoryViewProps) {
+  const [searchQuery, setSearchQuery] = useState('');
   const [selectedFilter, setSelectedFilter] = useState<string>('all');
+  const [editingKey, setEditingKey] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState('');
 
   // Gather all attempts across all folders
   const allAttempts: FlattenedAttempt[] = useMemo(() => {
@@ -51,13 +65,22 @@ export function HistoryView({
 
   // Filtered attempts
   const filteredAttempts = useMemo(() => {
-    return allAttempts.filter(({ folderId }) => {
+    return allAttempts.filter(({ folderId, folderTitle, attempt }) => {
       if (selectedFilter !== 'all' && folderId !== selectedFilter) {
         return false;
       }
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const titleMatch = (attempt.title || attempt.role || '').toLowerCase().includes(q);
+        return (
+          folderTitle.toLowerCase().includes(q) ||
+          titleMatch ||
+          attempt.finalSummary.toLowerCase().includes(q)
+        );
+      }
       return true;
     });
-  }, [allAttempts, selectedFilter]);
+  }, [allAttempts, selectedFilter, searchQuery]);
 
   // Calculate high-level summary metrics
   const totalAttempts = allAttempts.length;
@@ -74,6 +97,20 @@ export function HistoryView({
 
   return (
     <div className="min-h-screen bg-[#F4F6F9] text-slate-900 pb-16">
+      {/* ── TOP HEADER BAR ── */}
+      <header className="sticky top-0 z-20 bg-[#F4F6F9]/90 backdrop-blur-md px-6 lg:px-10 py-4 flex items-center justify-between gap-4 border-b border-slate-200/80">
+        <div className="relative flex-1 max-w-2xl">
+          <Search className="w-4 h-4 absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search interview history by role, topic, or feedback..."
+            className="w-full bg-white text-slate-800 placeholder-slate-400 text-sm pl-11 pr-4 py-2.5 rounded-2xl border border-slate-200/90 shadow-xs focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/10 transition-all"
+          />
+        </div>
+      </header>
+
       {/* ── MAIN HISTORY CONTAINER ── */}
       <main className="px-6 lg:px-10 py-8 lg:py-10 space-y-7 max-w-7xl mx-auto">
         {/* Top Header Card */}
@@ -214,9 +251,68 @@ export function HistoryView({
                         </span>
                       </div>
 
-                      <h3 className="text-lg font-bold text-slate-900 tracking-tight group-hover:text-blue-600 transition-colors">
-                        {attempt.role}
-                      </h3>
+                      {editingKey === `${folderId}-${attempt.attemptNumber}` ? (
+                        <form
+                          onSubmit={(e) => {
+                            e.preventDefault();
+                            const trimmed = editTitle.trim();
+                            if (trimmed && onRenameHistoryItem) {
+                              onRenameHistoryItem(
+                                `attempt-${folderId}-${attempt.attemptNumber}`,
+                                trimmed,
+                                folderId,
+                                attempt.attemptNumber
+                              );
+                            }
+                            setEditingKey(null);
+                          }}
+                          className="flex items-center gap-2 mt-1"
+                        >
+                          <input
+                            type="text"
+                            value={editTitle}
+                            onChange={(e) => setEditTitle(e.target.value)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Escape') setEditingKey(null);
+                            }}
+                            autoFocus
+                            className="text-base font-bold text-slate-900 px-2.5 py-1 rounded-lg border border-blue-500 focus:outline-none ring-1 ring-blue-500/40"
+                          />
+                          <button
+                            type="submit"
+                            className="p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-50 transition-colors cursor-pointer"
+                            title="Save"
+                          >
+                            <Check className="w-4 h-4" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditingKey(null)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 transition-colors cursor-pointer"
+                            title="Cancel"
+                          >
+                            <X className="w-4 h-4" />
+                          </button>
+                        </form>
+                      ) : (
+                        <div className="flex items-center gap-2 group/title">
+                          <h3 className="text-lg font-bold text-slate-900 tracking-tight group-hover:text-blue-600 transition-colors">
+                            {attempt.title || attempt.role}
+                          </h3>
+                          {onRenameHistoryItem && (
+                            <button
+                              onClick={() => {
+                                setEditingKey(`${folderId}-${attempt.attemptNumber}`);
+                                setEditTitle(attempt.title || attempt.role);
+                              }}
+                              className="opacity-0 group-hover/title:opacity-100 p-1 text-slate-400 hover:text-slate-700 hover:bg-slate-100 rounded-md transition-all cursor-pointer"
+                              title="Rename interview"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      )}
 
                       <p className="text-xs text-slate-600 line-clamp-2 leading-relaxed">
                         {attempt.finalSummary}
@@ -253,7 +349,13 @@ export function HistoryView({
                       {/* Review Action */}
                       <button
                         type="button"
-                        onClick={() => onSelectFolder(folderId)}
+                        onClick={() =>
+                          onSelectFolder(
+                            folderId,
+                            attempt.attemptNumber,
+                            `attempt-${folderId}-${attempt.attemptNumber}`
+                          )
+                        }
                         className="px-4 py-2.5 rounded-xl bg-slate-900 hover:bg-blue-600 text-white text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer group-hover:bg-blue-600"
                       >
                         <span>View Review</span>

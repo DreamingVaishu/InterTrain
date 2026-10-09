@@ -675,6 +675,27 @@ when coding information exists, then give the most useful next step. Do not retu
     return {"summary": summary}
 
 
+@app.get("/api/live-interview/sessions")
+async def list_sections():
+    """List all real saved live interview sessions from disk."""
+    sessions = []
+    if SECTIONS_DIR.exists():
+        for path in sorted(SECTIONS_DIR.glob("section_*.json"), key=lambda p: p.stat().st_mtime, reverse=True):
+            try:
+                data = json.loads(path.read_text(encoding="utf-8"))
+                sessions.append({
+                    "section_id": data.get("section_id"),
+                    "subject": data.get("subject", "Technical Interview"),
+                    "difficulty": data.get("difficulty", "Intermediate"),
+                    "status": data.get("status", "in_progress"),
+                    "current_round": data.get("current_round", 1),
+                    "started_at": data.get("started_at"),
+                })
+            except Exception:
+                continue
+    return sessions
+
+
 @app.get("/api/live-interview/{section_id}")
 async def get_section(section_id: str):
     return load_section(section_id)
