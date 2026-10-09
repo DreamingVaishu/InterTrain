@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import { generateHistorySummary } from '../services/liveInterview';
 import { Folder, RotateCcw, Award, CheckCircle2, ChevronRight, AlertCircle, ArrowLeft } from 'lucide-react';
 import { HistoryFolder } from '../types';
 
@@ -14,9 +15,38 @@ export function AttemptReviewView({
   onStartAgain,
 }: AttemptReviewViewProps) {
   const [selectedAttemptIndex, setSelectedAttemptIndex] = useState(0);
+  const [generatedSummary, setGeneratedSummary] = useState('');
+  const [summaryLoading, setSummaryLoading] = useState(false);
+  const [summaryError, setSummaryError] = useState('');
 
   const currentAttempt =
     folder.attempts[selectedAttemptIndex] || folder.attempts[0];
+
+  useEffect(() => {
+    let cancelled = false;
+    const savedSummary = currentAttempt?.finalSummary?.trim();
+    const summaryIsMissing = !savedSummary || /ended before a final ai evaluation|summary unavailable|no summary/i.test(savedSummary);
+    setGeneratedSummary('');
+    setSummaryError('');
+    if (!summaryIsMissing || !currentAttempt) return;
+
+    setSummaryLoading(true);
+    void generateHistorySummary({
+      subject: currentAttempt.role || folder.title,
+      questions: currentAttempt.questions.map((item) => ({ question: item.question, response: item.response })),
+      code: currentAttempt.code || '',
+      language: currentAttempt.language || currentAttempt.codeProblem?.language || '',
+      code_problem: currentAttempt.codeProblem,
+      code_review: currentAttempt.codeReview,
+    }).then((result) => {
+      if (!cancelled) setGeneratedSummary(result.summary);
+    }).catch((error: unknown) => {
+      if (!cancelled) setSummaryError(error instanceof Error ? error.message : 'Could not generate the summary.');
+    }).finally(() => {
+      if (!cancelled) setSummaryLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [currentAttempt, folder.title]);
 
   return (
     <div className="min-h-screen bg-[#DCDFE2] text-neutral-900 p-6 md:p-10 lg:p-12">
@@ -196,7 +226,11 @@ export function AttemptReviewView({
 
                 {/* Main verdict paragraph from screenshot */}
                 <p className="text-sm text-neutral-200 leading-relaxed mb-6 font-sans">
-                  {currentAttempt.finalSummary}
+                  {currentAttempt.finalSummary?.trim() && !/ended before a final ai evaluation|summary unavailable|no summary/i.test(currentAttempt.finalSummary)
+                    ? currentAttempt.finalSummary
+                    : summaryLoading
+                      ? 'Generating a helpful review from your full interview conversation and coding submission…'
+                      : generatedSummary || (summaryError ? `Summary could not be generated: ${summaryError}` : 'A summary will be generated from the saved interview answers and code review.')}
                 </p>
 
                 {/* Tips to improve */}

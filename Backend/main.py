@@ -60,6 +60,15 @@ class CompleteInterviewRequest(BaseModel):
     section_id: str = Field(min_length=1)
 
 
+class SummaryRequest(BaseModel):
+    subject: str = Field(default="Technical interview", max_length=200)
+    questions: list[dict[str, Any]] = Field(default_factory=list)
+    code: str = Field(default="", max_length=50000)
+    language: str = ""
+    code_problem: dict[str, Any] | None = None
+    code_review: dict[str, Any] | None = None
+
+
 class CodeSubmitRequest(BaseModel):
     section_id: str = Field(min_length=1)
     code: str = Field(min_length=1, max_length=50000)
@@ -628,6 +637,42 @@ spoken answers and the actual code review. Do not invent evidence.
         "code_execution": section.get("code_execution"),
         "code_review": section.get("code_review"),
     }
+
+
+@app.post("/api/summarize-history")
+async def summarize_history(request: SummaryRequest):
+    """Generate a helpful summary for older saved attempts that have no summary."""
+    conversation = []
+    for index, item in enumerate(request.questions, start=1):
+        question = str(item.get("question", "")).strip()
+        answer = str(item.get("response", item.get("answer", ""))).strip()
+        if question or answer:
+            conversation.append(f"Round {index}\nQuestion: {question}\nCandidate answer: {answer}")
+
+    prompt = f"""
+You are a supportive, honest interview coach. Write a useful summary for the candidate,
+not a generic compliment. Use the entire conversation and the code review if supplied.
+Explain what the candidate demonstrated, what was strong, and what to improve next.
+Keep it around 120-180 words, clear and encouraging, and do not invent details.
+
+Subject: {request.subject}
+Conversation:
+{chr(10).join(conversation) or 'No interview answers were saved.'}
+
+Coding problem:
+{json.dumps(request.code_problem, ensure_ascii=False)}
+
+Candidate code ({request.language}):
+{request.code[:12000] or 'No code submission was saved.'}
+
+Code review and execution results:
+{json.dumps(request.code_review, ensure_ascii=False)}
+
+Write one coherent summary that discusses spoken answers and coding performance separately
+when coding information exists, then give the most useful next step. Do not return JSON.
+"""
+    summary = (await ask_ai(prompt, temperature=0.3)).strip()
+    return {"summary": summary}
 
 
 @app.get("/api/live-interview/{section_id}")

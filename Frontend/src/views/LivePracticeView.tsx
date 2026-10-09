@@ -14,6 +14,7 @@ import {
   Terminal,
   Volume2,
   Maximize2,
+  PanelsTopLeft,
 } from 'lucide-react';
 import { PracticeTrack, QuestionResponse } from '../types';
 import { completeLiveInterview, startLiveInterview, submitLiveAnswer, type InterviewEvaluation } from '../services/liveInterview';
@@ -595,39 +596,10 @@ export function LivePracticeView({
               <h2 className="text-sm font-bold text-slate-900 tracking-tight leading-none">
                 {track.title} Mock Interview
               </h2>
-              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-blue-50 text-blue-700 border border-blue-200/80">
-                {difficultyDisplay}
-              </span>
             </div>
 
-            <div className="hidden md:flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-semibold">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              <span>Live Interview • Round {interviewRound || 1} of 5</span>
-            </div>
           </div>
 
-          {/* Right: Camera status badge */}
-          <div className="flex items-center gap-2.5">
-            <div
-              className={`flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-semibold border ${
-                cameraAvailable && !isVideoStopped
-                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                  : 'bg-slate-100 text-slate-600 border-slate-200'
-              }`}
-            >
-              {cameraAvailable && !isVideoStopped ? (
-                <>
-                  <Video className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>Camera On</span>
-                </>
-              ) : (
-                <>
-                  <VideoOff className="w-3.5 h-3.5 text-slate-400" />
-                  <span>Camera Off</span>
-                </>
-              )}
-            </div>
-          </div>
         </header>
 
         {/* Main Stage (Edge-to-Edge, No Left Sidebar) */}
@@ -763,19 +735,6 @@ export function LivePracticeView({
                       </div>
                     </div>
 
-                    {/* ── THE ONLY VS CODE BUTTON (Bottom Right of Candidate Tile) ── */}
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setLayoutMode('code');
-                      }}
-                      className="absolute bottom-3 right-3 flex items-center gap-2 px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-95 text-white text-xs font-bold shadow-md border border-blue-400/40 transition-all cursor-pointer z-20 group"
-                      title="Open full VS Code workspace"
-                    >
-                      <Code2 className="w-4 h-4 text-cyan-200 group-hover:rotate-12 transition-transform" />
-                      <span>Open VS Code</span>
-                    </button>
                   </div>
 
                   {/* 4. BOTTOM RIGHT: OBSERVER */}
@@ -808,95 +767,66 @@ export function LivePracticeView({
                   </div>
                 </div>
 
-                {/* ── BOTTOM FLOATING MEETING CONTROLS DOCK (BELOW CAMERAS) ── */}
+                {/* Bottom icon-only call controls */}
                 <div className="pt-3 pb-1 flex justify-center shrink-0">
-                  <div className="flex items-center gap-6 px-6 py-2.5 rounded-2xl bg-white border border-slate-200/90 shadow-md">
-                    {/* Time Remaining Countdown Pill */}
-                    <div className="flex items-center gap-2 px-3.5 py-2 rounded-xl bg-slate-100 border border-slate-200 text-slate-800 font-mono text-xs font-bold">
+                  <div className="flex items-center gap-3 px-4 py-2.5 rounded-2xl bg-white border border-slate-200/90 shadow-md">
+                    <div className="w-10 h-10 flex items-center justify-center gap-1 rounded-xl bg-slate-100 text-slate-800 font-mono text-xs font-bold" title="Time remaining">
                       <Clock className="w-3.5 h-3.5 text-blue-600" />
-                      <span className="font-bold text-sm tracking-wide text-slate-900">
-                        {formatTime(secondsRemaining)}
-                      </span>
-                      <span className="text-slate-500 text-[11px] font-sans font-normal ml-0.5">
-                        Remaining
-                      </span>
+                      <span>{formatTime(secondsRemaining)}</span>
                     </div>
-
-                    {/* Mute / Unmute Button */}
                     <button
                       type="button"
                       onClick={handleToggleMute}
-                      className="flex flex-col items-center gap-1 group cursor-pointer"
+                      className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${isMuted ? 'bg-red-50 text-red-600 border border-red-200 hover:bg-red-100' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'}`}
                       title={isMuted ? 'Unmute microphone' : 'Mute microphone'}
+                      aria-label={isMuted ? 'Unmute microphone' : 'Mute microphone'}
                     >
-                      <div
-                        className={`w-10 h-10 rounded-full flex items-center justify-center transition-all shadow-xs ${
-                          isMuted
-                            ? 'bg-red-50 text-red-600 border border-red-200 hover:bg-red-100'
-                            : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-                        }`}
-                      >
-                        {isMuted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-                      </div>
-                      <span className="text-[10px] font-medium text-slate-500 group-hover:text-slate-800">
-                        {isMuted ? 'Unmute' : 'Mute'}
-                      </span>
+                      {isMuted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
                     </button>
-
-                    {/* Start / Stop Video Button */}
                     <button
                       type="button"
                       onClick={handleToggleVideo}
-                      className="flex flex-col items-center gap-1 group cursor-pointer"
+                      className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${isVideoStopped ? 'bg-red-50 text-red-600 border border-red-200 hover:bg-red-100' : 'bg-slate-100 hover:bg-slate-200 text-slate-700'}`}
                       title={isVideoStopped ? 'Start video' : 'Stop video'}
+                      aria-label={isVideoStopped ? 'Start video' : 'Stop video'}
                     >
-                      <div
-                        className={`w-10 h-10 rounded-full flex items-center justify-center transition-all shadow-xs ${
-                          isVideoStopped
-                            ? 'bg-red-50 text-red-600 border border-red-200 hover:bg-red-100'
-                            : 'bg-slate-100 hover:bg-slate-200 text-slate-700'
-                        }`}
-                      >
-                        {isVideoStopped ? <VideoOff className="w-4 h-4" /> : <Video className="w-4 h-4" />}
-                      </div>
-                      <span className="text-[10px] font-medium text-slate-500 group-hover:text-slate-800">
-                        {isVideoStopped ? 'Start Video' : 'Stop Video'}
-                      </span>
+                      {isVideoStopped ? <VideoOff className="w-4 h-4" /> : <Video className="w-4 h-4" />}
                     </button>
-
-                    {/* Camera Device Switcher (Clean Dropdown) */}
                     {videoDevices.length > 1 && (
-                      <div className="flex flex-col items-center gap-1">
-                        <div className="h-10 px-2 rounded-xl bg-slate-100 border border-slate-200 flex items-center">
-                          <select
-                            value={selectedDeviceId}
-                            onChange={(e) => {
-                              setSelectedDeviceId(e.target.value);
-                              void activateCamera(e.target.value);
-                            }}
-                            className="bg-transparent text-slate-700 text-[11px] font-medium focus:outline-none cursor-pointer"
-                            title="Switch camera device"
-                          >
-                            {videoDevices.map((dev, idx) => (
-                              <option key={dev.deviceId || idx} value={dev.deviceId}>
-                                {dev.label || `Camera ${idx + 1}`}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                        <span className="text-[10px] font-medium text-slate-500">Camera</span>
-                      </div>
+                      <label className="w-10 h-10 rounded-full flex items-center justify-center bg-slate-100 hover:bg-slate-200 text-slate-700" title="Switch camera">
+                        <Video className="w-4 h-4" />
+                        <select
+                          value={selectedDeviceId}
+                          onChange={(e) => {
+                            setSelectedDeviceId(e.target.value);
+                            void activateCamera(e.target.value);
+                          }}
+                          className="absolute w-px h-px opacity-0"
+                          aria-label="Switch camera device"
+                        >
+                          {videoDevices.map((dev, idx) => (
+                            <option key={dev.deviceId || idx} value={dev.deviceId}>{dev.label || `Camera ${idx + 1}`}</option>
+                          ))}
+                        </select>
+                      </label>
                     )}
-
-                    {/* Red End Session Button */}
+                    <button
+                      type="button"
+                      onClick={() => setLayoutMode(layoutMode === 'video' ? 'code' : 'video')}
+                      className="w-10 h-10 flex items-center justify-center rounded-full bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors"
+                      title={layoutMode === 'video' ? 'Open code editor' : 'Return to interview video'}
+                      aria-label={layoutMode === 'video' ? 'Open code editor' : 'Return to interview video'}
+                    >
+                      {layoutMode === 'video' ? <Code2 className="w-4 h-4" /> : <PanelsTopLeft className="w-4 h-4" />}
+                    </button>
                     <button
                       type="button"
                       onClick={handleEndSession}
-                      className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 active:scale-95 text-white text-xs font-bold shadow-md shadow-red-500/20 transition-all cursor-pointer"
+                      className="w-10 h-10 flex items-center justify-center rounded-full bg-red-600 hover:bg-red-700 active:scale-95 text-white shadow-md shadow-red-500/20 transition-all cursor-pointer"
                       title="End interview session"
+                      aria-label="End interview session"
                     >
                       <PhoneOff className="w-4 h-4" />
-                      <span>End Session</span>
                     </button>
                   </div>
                 </div>
@@ -1205,25 +1135,6 @@ export function LivePracticeView({
                       {track.title}
                     </h3>
 
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className={`px-2.5 py-0.5 rounded-full text-xs font-bold border ${
-                        difficultyDisplay === 'Easy'
-                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                          : difficultyDisplay === 'Hard'
-                          ? 'bg-red-50 text-red-700 border-red-200'
-                          : 'bg-amber-50 text-amber-700 border-amber-200'
-                      }`}>
-                        {difficultyDisplay}
-                      </span>
-                      <span className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-slate-100 text-slate-700 border border-slate-200">
-                        {track.category}
-                      </span>
-                      {track.topics.slice(0, 2).map((topic) => (
-                        <span key={topic} className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
-                          {topic}
-                        </span>
-                      ))}
-                    </div>
                   </div>
 
                   {/* Track Description */}

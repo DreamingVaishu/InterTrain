@@ -62,3 +62,18 @@ export function submitLiveAnswer(sectionId: string, answer: string) {
     body: JSON.stringify({ section_id: sectionId, answer }),
   });
 }
+
+
+export function generateHistorySummary(payload: {
+  subject: string;
+  questions: Array<{ question: string; response: string }>;
+  code?: string;
+  language?: string;
+  code_problem?: unknown;
+  code_review?: unknown;
+}) {
+  return request<{ summary: string }>('/api/summarize-history', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
