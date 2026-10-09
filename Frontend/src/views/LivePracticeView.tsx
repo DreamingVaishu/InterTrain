@@ -29,8 +29,9 @@ import {
   User,
 } from 'lucide-react';
 import { PracticeTrack, QuestionResponse } from '../types';
-import { startLiveInterview, submitLiveAnswer } from '../services/liveInterview';
-import { runCode as apiRunCode, evaluateCode as apiEvaluateCode, type EvaluateCodeResult } from '../services/codeExecution';
+import { startLiveInterview, submitLiveAnswer, skipLiveQuestion, completeLiveInterview, type InterviewEvaluation } from '../services/liveInterview';
+import { runCode as apiRunCode, submitCode as apiSubmitCode, type EvaluateCodeResult } from '../services/codeExecution';
+import { MonacoEditor } from '../components/MonacoEditor';
 
 interface LivePracticeViewProps {
   track: PracticeTrack;
@@ -46,6 +47,9 @@ interface LivePracticeViewProps {
     code: string;
     language: string;
     sessionId?: string;
+    evaluation?: InterviewEvaluation;
+    codeProblem?: InterviewEvaluation['coding_problem'];
+    codeReview?: InterviewEvaluation['code_review'];
   }) => void;
   onExit: () => void;
 }
@@ -159,6 +163,12 @@ export function LivePracticeView({
   // Live AI interview state
   const [liveQuestion, setLiveQuestion] = useState('');
   const [liveTranscript, setLiveTranscript] = useState('');
+  const [codeSubmitted, setCodeSubmitted] = useState(false);
+  const [isSkipping, setIsSkipping] = useState(false);
+  const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const finalTranscriptRef = useRef('');
+  const interimTranscriptRef = useRef('');
+  const manualMuteRef = useRef(initialMicMuted);
   const [interviewRound, setInterviewRound] = useState(0);
   const [interviewStatus, setInterviewStatus] = useState<'starting' | 'speaking' | 'listening' | 'processing' | 'completed' | 'error'>('starting');
   const [interviewError, setInterviewError] = useState('');
@@ -187,6 +197,11 @@ export function LivePracticeView({
   // Video devices state
   const [videoDevices, setVideoDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>('');
+  const [audioInputDevices, setAudioInputDevices] = useState<MediaDeviceInfo[]>([]);
+  const [audioOutputDevices, setAudioOutputDevices] = useState<MediaDeviceInfo[]>([]);
+  const [selectedAudioInputId, setSelectedAudioInputId] = useState('');
+  const [selectedAudioOutputId, setSelectedAudioOutputId] = useState('');
+  const [deviceMenuOpen, setDeviceMenuOpen] = useState(false);
 
   // Enumerate video devices
   const loadVideoDevices = async () => {
@@ -194,7 +209,13 @@ export function LivePracticeView({
       if (navigator.mediaDevices?.enumerateDevices) {
         const devices = await navigator.mediaDevices.enumerateDevices();
         const vInputs = devices.filter((d) => d.kind === 'videoinput');
+        const aInputs = devices.filter((d) => d.kind === 'audioinput');
+        const aOutputs = devices.filter((d) => d.kind === 'audiooutput');
         setVideoDevices(vInputs);
+        setAudioInputDevices(aInputs);
+        setAudioOutputDevices(aOutputs);
+        if (aInputs.length && !selectedAudioInputId) setSelectedAudioInputId(aInputs[0].deviceId);
+        if (aOutputs.length && !selectedAudioOutputId) setSelectedAudioOutputId(aOutputs[0].deviceId);
         if (vInputs.length > 0 && !selectedDeviceId) {
           setSelectedDeviceId(vInputs[0].deviceId);
         }
@@ -371,6 +392,7 @@ export function LivePracticeView({
   // Toggle Mute
   const handleToggleMute = () => {
     const nextMuted = !isMuted;
+    manualMuteRef.current = nextMuted;
     setIsMuted(nextMuted);
     if (nextMuted) {
       stopSTT();
@@ -391,6 +413,7 @@ export function LivePracticeView({
   const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
   const stopSTT = () => {
+    if (silenceTimerRef.current) { clearTimeout(silenceTimerRef.current); silenceTimerRef.current = null; }
     if (recorderRef.current && recorderRef.current.state !== 'inactive') recorderRef.current.stop();
     recorderRef.current = null;
     if (sttStreamRef.current) {
@@ -405,23 +428,28 @@ export function LivePracticeView({
   };
 
   const startListening = async () => {
-    if (!sessionId || isMuted || interviewStatus === 'completed' || processingAnswerRef.current) return;
+    if (!sessionId || manualMuteRef.current || interviewStatus === 'completed' || processingAnswerRef.current) return;
     try {
       stopSTT();
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      setIsMuted(false);
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: selectedAudioInputId ? { deviceId: { exact: selectedAudioInputId } } : true,
+      });
       sttStreamRef.current = stream;
       const wsProtocol = API_BASE.startsWith('https') ? 'wss' : 'ws';
       const wsHost = API_BASE.replace(/^https?:\/\//, '');
       const socket = new WebSocket(`${wsProtocol}://${wsHost}/ws/live-interview/${sessionId}`);
       sttSocketRef.current = socket;
       answerBufferRef.current = '';
+      finalTranscriptRef.current = '';
+      interimTranscriptRef.current = '';
       setLiveTranscript('');
 
       socket.onopen = () => {
         setInterviewStatus('listening');
-        const preferred = 'audio/webm;codecs=opus';
-        const mimeType = MediaRecorder.isTypeSupported(preferred) ? preferred : 'audio/webm';
-        const recorder = new MediaRecorder(stream, { mimeType });
+        const mimeCandidates = ['audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus', 'audio/mp4'];
+        const mimeType = mimeCandidates.find((type) => MediaRecorder.isTypeSupported(type));
+        const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
         recorderRef.current = recorder;
         recorder.ondataavailable = (event) => {
           if (event.data.size > 0 && socket.readyState === WebSocket.OPEN) {
@@ -431,62 +459,44 @@ export function LivePracticeView({
         recorder.start(250);
       };
 
-      socket.onmessage = async (event) => {
-        const data = JSON.parse(event.data);
-        if (data.type === 'transcript_partial') {
-          answerBufferRef.current = data.transcript || '';
-          setLiveTranscript(answerBufferRef.current);
-        } else if (data.type === 'transcript_final') {
-          const text = (data.transcript || answerBufferRef.current).trim();
-          if (!text || processingAnswerRef.current) return;
-          answerBufferRef.current = text;
-          setLiveTranscript(text);
-          processingAnswerRef.current = true;
-          setInterviewStatus('processing');
-          stopSTT();
-          try {
-            const result = await submitLiveAnswer(sessionId, text);
-            const newQA: QuestionResponse = {
-              id: `${sessionId}-${interviewRound}`,
-              question: liveQuestion,
-              response: text,
-            };
-            const allQuestions = [...completedQuestions, newQA];
-            setCompletedQuestions(allQuestions);
-            if (result.completed) {
-              setInterviewRound(5);
-              setInterviewStatus('completed');
-              setInterviewerSubtitle('Interview completed. Thank you for your time.');
-              onEndSession({
-                track,
-                duration: formatTime(1477 - secondsRemaining),
-                questions: allQuestions,
-                code: codeContent,
-                language: selectedLanguage,
-                sessionId,
-              });
+      socket.onmessage = (event) => {
+        let data: any;
+        try { data = JSON.parse(event.data); } catch { return; }
+        if (data.type === 'transcript' || data.type === 'transcript_partial' || data.type === 'transcript_final' || data.type === 'utterance_end' || data.type === 'UtteranceEnd') {
+          const text = String(data.transcript || '').trim();
+          if (text) {
+            if (data.is_final || data.type === 'transcript_final') {
+              // Deepgram final results are discrete segments. Add each segment once;
+              // interim results are displayed separately and never appended twice.
+              const current = finalTranscriptRef.current;
+              if (!current.endsWith(text)) finalTranscriptRef.current = `${current} ${text}`.trim();
+              interimTranscriptRef.current = '';
             } else {
-              setInterviewRound(result.round);
-              setLiveQuestion(result.question || '');
-              setInterviewerSubtitle(result.question || '');
-              setAiAudioUrl(`${API_BASE}${result.audio_url || ''}`);
-              setLiveTranscript('');
-              answerBufferRef.current = '';
+              interimTranscriptRef.current = text;
             }
-          } catch (error) {
-            console.error(error);
-            setInterviewError(error instanceof Error ? error.message : 'Unable to process your answer.');
-            setInterviewStatus('error');
-          } finally {
-            processingAnswerRef.current = false;
+            answerBufferRef.current = [finalTranscriptRef.current, interimTranscriptRef.current].filter(Boolean).join(' ').trim();
+            setLiveTranscript(answerBufferRef.current);
+            if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+            // Deepgram speech_final is the best endpoint signal; endpointing also
+            // catches pauses when speech_final is delayed or omitted.
+            silenceTimerRef.current = setTimeout(() => {
+              const answer = (finalTranscriptRef.current || answerBufferRef.current).trim();
+              if (answer && !processingAnswerRef.current) void finalizeSpokenAnswer(answer);
+            }, data.speech_final ? 1200 : 3200);
+          } else if ((data.speech_final || data.type === 'utterance_end' || data.type === 'UtteranceEnd') && answerBufferRef.current.trim()) {
+            if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+            silenceTimerRef.current = setTimeout(() => {
+              const answer = (finalTranscriptRef.current || answerBufferRef.current).trim();
+              if (answer && !processingAnswerRef.current) void finalizeSpokenAnswer(answer);
+            }, 800);
           }
         } else if (data.type === 'error') {
           setInterviewError(data.message || 'Deepgram STT error.');
           setInterviewStatus('error');
+          setIsMuted(true);
           stopSTT();
         }
       };
-
       socket.onerror = () => {
         setInterviewError('Unable to connect to Deepgram STT.');
         setInterviewStatus('error');
@@ -499,8 +509,100 @@ export function LivePracticeView({
     }
   };
 
+  const finalizeSpokenAnswer = async (text: string) => {
+    if (!sessionId || processingAnswerRef.current || !text.trim()) return;
+    processingAnswerRef.current = true;
+    if (silenceTimerRef.current) clearTimeout(silenceTimerRef.current);
+    setInterviewStatus('processing');
+    setIsMuted(true);
+    stopSTT();
+    try {
+      const result = await submitLiveAnswer(sessionId, text.trim());
+      if (interviewRound === 5 && codeSubmitted) {
+        const evaluation = await completeLiveInterview(sessionId);
+        setLastEvaluation({
+          verdict: evaluation.overall_score >= 70 ? 'Accepted' : evaluation.overall_score >= 45 ? 'Needs Improvement' : 'Rejected',
+          score: evaluation.overall_score,
+          summary: evaluation.summary,
+          strengths: evaluation.strengths || [],
+          improvements: evaluation.improvements || [],
+          time_complexity: 'See code review',
+          space_complexity: 'See code review',
+        });
+        setInterviewStatus('completed');
+        setInterviewerSubtitle('Interview completed. Your full review is ready.');
+        onEndSession({
+          track,
+          duration: formatTime(1477 - secondsRemaining),
+          questions: [...completedQuestions, { id: `${sessionId}-5-code`, question: liveQuestion, response: `Submitted ${selectedLanguage} code for review. See the code review section for execution results.` }, { id: `${sessionId}-5-explanation`, question: 'Explain your submitted code and approach', response: text.trim() }],
+          code: codeContent,
+          language: selectedLanguage,
+          sessionId,
+          evaluation,
+          codeProblem: evaluation.coding_problem,
+          codeReview: evaluation.code_review,
+        });
+        return;
+      }
+      const newQA: QuestionResponse = { id: `${sessionId}-${interviewRound}`, question: liveQuestion, response: text.trim() };
+      const allQuestions = [...completedQuestions, newQA];
+      setCompletedQuestions(allQuestions);
+      setInterviewRound(result.round);
+      setLiveQuestion(result.question || '');
+      setInterviewerSubtitle(result.question || '');
+      setLiveTranscript('');
+      answerBufferRef.current = '';
+      finalTranscriptRef.current = '';
+      interimTranscriptRef.current = '';
+      if (result.round_type === 'coding' && result.coding_problem) {
+        setLayoutMode('code');
+        setSelectedLanguage(result.coding_problem.language || 'python');
+        setCodeContent(result.coding_problem.starter_code || '# Write your solution here\n');
+        setLiveQuestion(result.coding_problem.question);
+        setInterviewerSubtitle(result.coding_problem.question);
+        setAiAudioUrl(result.audio_url ? `${API_BASE}${result.audio_url}` : '');
+      } else {
+        setAiAudioUrl(`${API_BASE}${result.audio_url || ''}`);
+      }
+    } catch (error) {
+      setInterviewError(error instanceof Error ? error.message : 'Unable to process your answer.');
+      setInterviewStatus('error');
+    } finally {
+      processingAnswerRef.current = false;
+    }
+  };
+
+  const handleSkipQuestion = async () => {
+    if (!sessionId || isSkipping || processingAnswerRef.current || interviewRound >= 5) return;
+    setIsSkipping(true);
+    stopSTT();
+    if (audioRef.current) audioRef.current.pause();
+    try {
+      const result = await skipLiveQuestion(sessionId);
+      setCompletedQuestions((prev) => [...prev, { id: `${sessionId}-${interviewRound}-skip`, question: liveQuestion, response: '[Skipped]' }]);
+      setInterviewRound(result.round);
+      setLiveQuestion(result.question || '');
+      setInterviewerSubtitle(result.question || '');
+      if (result.round_type === 'coding' && result.coding_problem) {
+        setLayoutMode('code');
+        setSelectedLanguage(result.coding_problem.language || 'python');
+        setCodeContent(result.coding_problem.starter_code || '# Write your solution here\n');
+        setLiveQuestion(result.coding_problem.question);
+        setAiAudioUrl(result.audio_url ? `${API_BASE}${result.audio_url}` : '');
+      } else {
+        setAiAudioUrl(`${API_BASE}${result.audio_url || ''}`);
+      }
+      setLiveTranscript(''); answerBufferRef.current = ''; finalTranscriptRef.current = '';
+    } catch (error) {
+      setInterviewError(error instanceof Error ? error.message : 'Could not skip this question.');
+    } finally { setIsSkipping(false); }
+  };
+
   const playQuestionAudio = async (url: string) => {
     if (!audioRef.current || !url) return;
+    // Never capture the interviewer through the candidate microphone.
+    stopSTT();
+    setIsMuted(true);
     audioRef.current.src = url;
     audioRef.current.load();
     setInterviewStatus('speaking');
@@ -565,7 +667,14 @@ export function LivePracticeView({
       setIsAiSpeaking(false);
       if (interviewStatus === 'speaking') {
         setActiveSpeaker('candidate');
-        void startListening();
+        if (!manualMuteRef.current) {
+          setIsMuted(false);
+          setInterviewStatus('listening');
+          window.setTimeout(() => { void startListening(); }, 150);
+        } else {
+          setIsMuted(true);
+          setInterviewStatus('listening');
+        }
       }
     };
     audio.addEventListener('play', onPlay);
@@ -579,17 +688,28 @@ export function LivePracticeView({
   }, [interviewStatus, aiAudioUrl, interviewRound]);
 
   // End Session
-  const handleEndSession = () => {
+  const handleEndSession = async () => {
     stopSTT();
-    const recordedQA: QuestionResponse[] = completedQuestions;
-
+    if (audioRef.current) audioRef.current.pause();
+    let evaluation: InterviewEvaluation | undefined;
+    if (sessionId) {
+      try {
+        evaluation = await completeLiveInterview(sessionId);
+      } catch (error) {
+        setInterviewError(`Could not generate the full review: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+    setInterviewStatus('completed');
     onEndSession({
       track,
       duration: formatTime(1477 - secondsRemaining),
-      questions: recordedQA,
+      questions: completedQuestions,
       code: codeContent,
       language: selectedLanguage,
       sessionId,
+      evaluation,
+      codeProblem: evaluation?.coding_problem,
+      codeReview: evaluation?.code_review,
     });
   };
 
@@ -624,13 +744,19 @@ export function LivePracticeView({
     setIsExecuting(true);
     setCodeOutput('Submitting to AI evaluator...');
     try {
-      const evaluation = await apiEvaluateCode(
-        sessionId,
-        codeContent,
-        selectedLanguage,
-        liveQuestion,
-      );
+      const submission = await apiSubmitCode(sessionId, codeContent, selectedLanguage);
+      const review = submission.review;
+      const evaluation: EvaluateCodeResult = {
+        verdict: review.verdict === 'Accepted' ? 'Accepted' : review.score >= 50 ? 'Needs Improvement' : 'Rejected',
+        score: review.score,
+        summary: review.summary,
+        strengths: review.strengths || [],
+        improvements: review.improvements || [],
+        time_complexity: review.time_complexity || 'Not estimated',
+        space_complexity: review.space_complexity || 'Not estimated',
+      };
       setLastEvaluation(evaluation);
+      setCodeSubmitted(true);
       const verdictIcon = evaluation.verdict === 'Accepted' ? '✓' : evaluation.verdict === 'Rejected' ? '✗' : '△';
       const lines: string[] = [
         `${verdictIcon} Verdict: ${evaluation.verdict} (Score: ${evaluation.score}/100)`,
@@ -655,14 +781,21 @@ export function LivePracticeView({
         {
           id: 'sub-' + Date.now(),
           status: evaluation.verdict,
-          runtime: evaluation.runtime_estimate,
-          memory: evaluation.memory_estimate,
+          runtime: evaluation.runtime_estimate || '—',
+          memory: evaluation.memory_estimate || '—',
           timestamp: 'Just now',
           score: evaluation.score,
         },
         ...prev,
       ]);
       setActiveTab('submissions');
+      setLiveQuestion('Now explain your solution, why you chose this approach, and its time and space complexity.');
+      setInterviewerSubtitle('Please explain your submitted code aloud.');
+      setAiAudioUrl('');
+      setInterviewStatus('listening');
+      setLiveTranscript(''); answerBufferRef.current = ''; finalTranscriptRef.current = '';
+      setLayoutMode('video');
+      if (!isMuted) void startListening();
     } catch (err) {
       setCodeOutput('Error during AI evaluation: ' + (err instanceof Error ? err.message : String(err)));
     } finally {
@@ -729,33 +862,13 @@ export function LivePracticeView({
               </span>
             </div>
 
-            <div className="hidden md:flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 text-xs font-semibold">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-              <span>Multi-Agent Live Session • Round {interviewRound || 1} of 5</span>
+            <div className="hidden md:flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200 text-xs font-semibold">
+              Round {interviewRound || 1} of 5
             </div>
           </div>
 
-          {/* Right: Camera status badge */}
-          <div className="flex items-center gap-2.5">
-            <div
-              className={`flex items-center gap-1.5 px-3 py-1 rounded-xl text-xs font-semibold border ${
-                cameraAvailable && !isVideoStopped
-                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                  : 'bg-slate-100 text-slate-600 border-slate-200'
-              }`}
-            >
-              {cameraAvailable && !isVideoStopped ? (
-                <>
-                  <Video className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>Camera On</span>
-                </>
-              ) : (
-                <>
-                  <VideoOff className="w-3.5 h-3.5 text-slate-400" />
-                  <span>Camera Off</span>
-                </>
-              )}
-            </div>
+          <div className="flex items-center gap-2" aria-label={cameraAvailable && !isVideoStopped ? 'Camera on' : 'Camera off'}>
+            {cameraAvailable && !isVideoStopped ? <Video className="w-4 h-4 text-emerald-600" /> : <VideoOff className="w-4 h-4 text-slate-400" />}
           </div>
         </header>
 
@@ -793,9 +906,6 @@ export function LivePracticeView({
                         <div className="flex flex-col leading-tight">
                           <span className="text-xs font-bold text-white leading-none">
                             Moderator
-                          </span>
-                          <span className="text-[10px] text-neutral-300 leading-none">
-                            InterTrain AI
                           </span>
                         </div>
                       </div>
@@ -837,9 +947,6 @@ export function LivePracticeView({
                         <div className="flex flex-col leading-tight">
                           <span className="text-xs font-bold text-white leading-none">
                             Technical Interviewer
-                          </span>
-                          <span className="text-[10px] text-neutral-300 leading-none">
-                            InterTrain AI
                           </span>
                         </div>
                       </div>
@@ -937,19 +1044,7 @@ export function LivePracticeView({
                         </div>
                       )}
 
-                      {/* ── THE ONLY VS CODE BUTTON (Bottom Right of Candidate Tile) ── */}
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setLayoutMode('code');
-                        }}
-                        className="absolute bottom-3 right-3 flex items-center gap-2 px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-95 text-white text-xs font-bold shadow-md border border-blue-400/40 transition-all cursor-pointer z-20 group"
-                        title="Open full VS Code workspace"
-                      >
-                        <Code2 className="w-4 h-4 text-cyan-200 group-hover:rotate-12 transition-transform" />
-                        <span>Open VS Code</span>
-                      </button>
+
                     </div>
 
                     {/* 4. BOTTOM RIGHT: OBSERVER */}
@@ -967,9 +1062,6 @@ export function LivePracticeView({
                         <div className="flex flex-col leading-tight">
                           <span className="text-xs font-bold text-white leading-none">
                             Observer
-                          </span>
-                          <span className="text-[10px] text-neutral-300 leading-none">
-                            InterTrain AI
                           </span>
                         </div>
                       </div>
@@ -1173,16 +1265,6 @@ export function LivePracticeView({
                         </div>
                       )}
 
-                      {/* Always present "Open VS Code" Button on Main Stage */}
-                      <button
-                        type="button"
-                        onClick={() => setLayoutMode('code')}
-                        className="absolute bottom-3 right-3 flex items-center gap-2 px-3.5 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 active:scale-95 text-white text-xs font-bold shadow-md border border-blue-400/40 transition-all cursor-pointer z-20 group"
-                        title="Open full VS Code workspace"
-                      >
-                        <Code2 className="w-4 h-4 text-cyan-200 group-hover:rotate-12 transition-transform" />
-                        <span>Open VS Code</span>
-                      </button>
                     </div>
                   </div>
                 )}
@@ -1247,9 +1329,7 @@ export function LivePracticeView({
                       >
                         {isMuted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
                       </div>
-                      <span className="text-[10px] font-medium text-slate-500 group-hover:text-slate-800">
-                        {isMuted ? 'Unmute' : 'Mute'}
-                      </span>
+
                     </button>
 
                     {/* Start / Stop Video Button */}
@@ -1268,34 +1348,45 @@ export function LivePracticeView({
                       >
                         {isVideoStopped ? <VideoOff className="w-4 h-4" /> : <Video className="w-4 h-4" />}
                       </div>
-                      <span className="text-[10px] font-medium text-slate-500 group-hover:text-slate-800">
-                        {isVideoStopped ? 'Start Video' : 'Stop Video'}
-                      </span>
+
                     </button>
 
-                    {/* Camera Device Switcher (Clean Dropdown) */}
-                    {videoDevices.length > 1 && (
-                      <div className="flex flex-col items-center gap-1">
-                        <div className="h-10 px-2 rounded-xl bg-slate-100 border border-slate-200 flex items-center">
-                          <select
-                            value={selectedDeviceId}
-                            onChange={(e) => {
-                              setSelectedDeviceId(e.target.value);
-                              void activateCamera(e.target.value);
-                            }}
-                            className="bg-transparent text-slate-700 text-[11px] font-medium focus:outline-none cursor-pointer"
-                            title="Switch camera device"
-                          >
-                            {videoDevices.map((dev, idx) => (
-                              <option key={dev.deviceId || idx} value={dev.deviceId}>
-                                {dev.label || `Camera ${idx + 1}`}
-                              </option>
-                            ))}
+                    {/* Device settings arrow: microphone, speaker, and camera */}
+                    <div className="relative">
+                      <button type="button" onClick={() => { setDeviceMenuOpen((open) => !open); void loadVideoDevices(); }}
+                        className="w-8 h-8 rounded-full flex items-center justify-center bg-slate-100 hover:bg-slate-200 text-slate-700"
+                        title="Choose microphone, speaker, or camera" aria-label="Device settings">
+                        <ChevronDown className="w-4 h-4" />
+                      </button>
+                      {deviceMenuOpen && <div className="absolute bottom-11 left-1/2 -translate-x-1/2 z-50 w-64 rounded-xl border border-slate-200 bg-white p-3 shadow-xl text-left space-y-3">
+                        <label className="block text-xs font-semibold text-slate-600">Microphone input
+                          <select value={selectedAudioInputId} onChange={(e) => { setSelectedAudioInputId(e.target.value); if (!isMuted && interviewStatus === 'listening') { stopSTT(); window.setTimeout(() => void startListening(), 150); } }} className="mt-1 w-full rounded-lg border border-slate-200 p-2 text-xs">
+                            {audioInputDevices.map((dev, idx) => <option key={dev.deviceId || idx} value={dev.deviceId}>{dev.label || `Microphone ${idx + 1}`}</option>)}
                           </select>
-                        </div>
-                        <span className="text-[10px] font-medium text-slate-500">Camera</span>
-                      </div>
-                    )}
+                        </label>
+                        <label className="block text-xs font-semibold text-slate-600">Audio output
+                          <select value={selectedAudioOutputId} onChange={async (e) => { setSelectedAudioOutputId(e.target.value); const audio = audioRef.current as (HTMLAudioElement & { setSinkId?: (id: string) => Promise<void> }) | null; if (audio?.setSinkId) { try { await audio.setSinkId(e.target.value); } catch (err) { console.warn('Unable to change audio output', err); } } }} className="mt-1 w-full rounded-lg border border-slate-200 p-2 text-xs">
+                            {audioOutputDevices.map((dev, idx) => <option key={dev.deviceId || idx} value={dev.deviceId}>{dev.label || `Speaker ${idx + 1}`}</option>)}
+                          </select>
+                        </label>
+                        <label className="block text-xs font-semibold text-slate-600">Camera
+                          <select value={selectedDeviceId} onChange={(e) => { setSelectedDeviceId(e.target.value); void activateCamera(e.target.value); }} className="mt-1 w-full rounded-lg border border-slate-200 p-2 text-xs">
+                            {videoDevices.map((dev, idx) => <option key={dev.deviceId || idx} value={dev.deviceId}>{dev.label || `Camera ${idx + 1}`}</option>)}
+                          </select>
+                        </label>
+                      </div>}
+                    </div>
+
+                    {/* Icon-only editor control in the bottom dock */}
+                    <button
+                      type="button"
+                      onClick={() => setLayoutMode(layoutMode === 'code' ? 'video' : 'code')}
+                      className="w-10 h-10 rounded-full flex items-center justify-center bg-slate-100 hover:bg-blue-100 text-slate-700 hover:text-blue-700 transition-colors"
+                      title={layoutMode === 'code' ? 'Return to interview' : 'Open code editor'}
+                      aria-label={layoutMode === 'code' ? 'Return to interview' : 'Open code editor'}
+                    >
+                      <Code2 className="w-4 h-4" />
+                    </button>
 
                     {/* Red End Session Button */}
                     <button
@@ -1350,20 +1441,8 @@ export function LivePracticeView({
                         <span className="text-[11px] font-bold text-white leading-none">
                           Moderator
                         </span>
-                        <span className="text-[9px] text-slate-300 leading-none mt-0.5">
-                          InterTrain AI
-                        </span>
                       </div>
                     </div>
-
-                    {/* Badge Bottom Right: 3 Dots Menu */}
-                    <button
-                      type="button"
-                      className="absolute bottom-2.5 right-2.5 w-7 h-7 rounded-lg bg-black/70 hover:bg-black/90 backdrop-blur-md border border-white/10 text-white flex items-center justify-center transition-colors cursor-pointer z-20"
-                      title="AI settings"
-                    >
-                      <MoreHorizontal className="w-3.5 h-3.5 text-slate-300" />
-                    </button>
                   </div>
 
                   {/* 2. TECHNICAL INTERVIEWER AI CAMERA */}
@@ -1397,20 +1476,8 @@ export function LivePracticeView({
                         <span className="text-[11px] font-bold text-white leading-none">
                           Technical Interviewer
                         </span>
-                        <span className="text-[9px] text-slate-300 leading-none mt-0.5">
-                          InterTrain AI
-                        </span>
                       </div>
                     </div>
-
-                    {/* Badge Bottom Right: 3 Dots Menu */}
-                    <button
-                      type="button"
-                      className="absolute bottom-2.5 right-2.5 w-7 h-7 rounded-lg bg-black/70 hover:bg-black/90 backdrop-blur-md border border-white/10 text-white flex items-center justify-center transition-colors cursor-pointer"
-                      title="AI settings"
-                    >
-                      <MoreHorizontal className="w-3.5 h-3.5 text-slate-300" />
-                    </button>
                   </div>
 
                   {/* 3. OBSERVER AI CAMERA */}
@@ -1430,20 +1497,8 @@ export function LivePracticeView({
                         <span className="text-[11px] font-bold text-white leading-none">
                           Observer
                         </span>
-                        <span className="text-[9px] text-slate-300 leading-none mt-0.5">
-                          InterTrain AI
-                        </span>
                       </div>
                     </div>
-
-                    {/* Badge Bottom Right: 3 Dots Menu */}
-                    <button
-                      type="button"
-                      className="absolute bottom-2.5 right-2.5 w-7 h-7 rounded-lg bg-black/70 hover:bg-black/90 backdrop-blur-md border border-white/10 text-white flex items-center justify-center transition-colors cursor-pointer"
-                      title="AI settings"
-                    >
-                      <MoreHorizontal className="w-3.5 h-3.5 text-slate-300" />
-                    </button>
                   </div>
 
                   {/* Return to Camera Conference View Button */}
@@ -1511,32 +1566,7 @@ export function LivePracticeView({
 
                   {/* Code Editor Body with Line Numbers */}
                   <div className="flex-1 flex bg-[#0B0F19] overflow-hidden relative">
-                    {/* Line numbers gutter */}
-                    <div className="w-11 py-3 select-none text-right pr-3 font-mono text-[11px] text-slate-600 bg-[#070A10] border-r border-slate-800/80 shrink-0 leading-relaxed">
-                      {Array.from({ length: Math.max(codeContent.split('\n').length, 16) }, (_, i) => (
-                        <div key={i + 1} className="h-5 leading-5">{i + 1}</div>
-                      ))}
-                    </div>
-
-                    {/* Editable textarea */}
-                    <textarea
-                      value={codeContent}
-                      onChange={(e) => setCodeContent(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Tab') {
-                          e.preventDefault();
-                          const target = e.currentTarget;
-                          const start = target.selectionStart;
-                          const end = target.selectionEnd;
-                          setCodeContent(codeContent.substring(0, start) + '    ' + codeContent.substring(end));
-                          setTimeout(() => {
-                            target.selectionStart = target.selectionEnd = start + 4;
-                          }, 0);
-                        }
-                      }}
-                      className="flex-1 bg-transparent text-slate-100 font-mono text-xs p-3 focus:outline-none resize-none leading-5 overflow-y-auto whitespace-pre selection:bg-blue-600/40"
-                      spellCheck={false}
-                    />
+                    <div className="flex-1 min-w-0 h-full"><MonacoEditor value={codeContent} language={selectedLanguage} onChange={setCodeContent} /></div>
                   </div>
 
                   {/* Action Bar between Editor and Console: Run Code | Submit | Custom Input toggle */}
@@ -1780,7 +1810,12 @@ export function LivePracticeView({
                         <span className="text-[11px] font-bold text-blue-800 uppercase tracking-wider">
                           Interviewer Question
                         </span>
-                        <span className="text-[10px] text-blue-600 font-medium">Round {interviewRound || 1} of 5</span>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] text-blue-600 font-medium">Round {interviewRound || 1} of 5</span>
+                          {interviewRound > 0 && interviewRound < 5 && interviewStatus !== 'completed' && (
+                            <button type="button" onClick={() => void handleSkipQuestion()} disabled={isSkipping || interviewStatus === 'processing'} className="px-2.5 py-1 rounded-lg border border-blue-200 bg-white text-blue-700 hover:bg-blue-100 text-[10px] font-semibold disabled:opacity-50">{isSkipping ? 'Skipping…' : 'Skip question'}</button>
+                          )}
+                        </div>
                       </div>
                       <p className="text-xs text-slate-800 leading-relaxed font-medium">
                         {liveQuestion}
@@ -1795,12 +1830,17 @@ export function LivePracticeView({
                           <span>{interviewStatus === 'speaking' ? 'AI is speaking...' : 'Replay AI question'}</span>
                         </button>
                       )}
-                      {liveTranscript && (
-                        <div className="pt-2 border-t border-blue-200/60 text-[11px] text-slate-600">
-                          <span className="font-semibold text-slate-700">Your response: </span>
-                          {liveTranscript}
+                      <div className="pt-2 border-t border-blue-200/60 space-y-1.5">
+                        <div className="flex items-center justify-between text-[10px] font-semibold text-slate-700">
+                          <span>Live transcription</span>
+                          <span className={interviewStatus === 'listening' && !isMuted ? 'text-emerald-600' : 'text-slate-500'}>
+                            {interviewStatus === 'speaking' || isAiSpeaking ? 'Mic off · interviewer speaking' : interviewStatus === 'listening' && !isMuted ? 'Mic on · listening' : interviewStatus === 'processing' ? 'Submitting answer…' : isMuted ? 'Mic off' : 'Waiting for speech'}
+                          </span>
                         </div>
-                      )}
+                        <div className="max-h-36 min-h-16 overflow-y-auto whitespace-pre-wrap break-words rounded-lg border border-blue-100 bg-white/90 p-2.5 text-[11px] leading-relaxed text-slate-700" aria-live="polite">
+                          {liveTranscript || (interviewStatus === 'listening' && !isMuted ? 'Listening… your recognized answer will appear here.' : 'Your answer will appear here while you speak.')}
+                        </div>
+                      </div>
                     </div>
                   ) : (
                     <div className="p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs text-slate-500 text-center">

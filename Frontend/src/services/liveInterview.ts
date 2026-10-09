@@ -23,6 +23,7 @@ export interface LiveInterviewResult {
   completed: boolean;
   round_type?: 'interview' | 'coding';
   coding_problem?: CodingProblem;
+  explanation_saved?: boolean;
 }
 
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:8000';
@@ -75,5 +76,12 @@ export function generateHistorySummary(payload: {
   return request<{ summary: string }>('/api/summarize-history', {
     method: 'POST',
     body: JSON.stringify(payload),
+  });
+}
+
+export function skipLiveQuestion(sectionId: string) {
+  return request<LiveInterviewResult>('/api/live-interview/answer', {
+    method: 'POST',
+    body: JSON.stringify({ section_id: sectionId, answer: '[Skipped by candidate]' }),
   });
 }

@@ -2,6 +2,7 @@ import asyncio
 import json
 import os
 import re
+import random
 import subprocess
 import sys
 import time
@@ -199,6 +200,25 @@ Rules:
 
 
 async def generate_coding_problem(section: dict[str, Any]) -> dict[str, Any]:
+    easy_concepts = [
+        "count the vowels in a string",
+        "find the largest number in a list",
+        "reverse a string",
+        "count the even numbers in a list",
+        "sum the digits of a positive integer",
+        "check whether a word is a palindrome",
+        "remove duplicate numbers while preserving their order",
+        "count how many times a target word appears in a sentence",
+        "calculate the sum of numbers in a list",
+        "find the shortest word in a sentence",
+    ]
+    # Older or newly created sections may store coding_problem as None.
+    # Normalize it before reading the previous question so the round-4 -> round-5
+    # transition cannot crash the answer endpoint.
+    previous_coding_problem = section.get("coding_problem") or {}
+    previous_coding_question = previous_coding_problem.get("question", "")
+    available_concepts = [concept for concept in easy_concepts if concept.lower() not in previous_coding_question.lower()]
+    selected_concept = random.choice(available_concepts or easy_concepts)
     prompt = f"""
 You are creating the final practical coding question for a technical interview.
 
@@ -208,8 +228,12 @@ Candidate level: {section['difficulty']}
 Interview history:
 {interview_history(section)}
 
-Create ONE practical coding problem that is relevant to the subject and suitable
-for the candidate level. It should be solvable in about 15-20 minutes.
+Create ONE EASY, beginner-friendly coding problem suitable for a short interview.
+It must be solvable in about 5-8 minutes, use basic loops, conditions, strings,
+lists, or simple dictionaries, and require no advanced algorithms or data structures.
+Avoid dynamic programming, graphs, recursion-heavy tasks, and two-sum. The required
+problem concept for this interview is: {selected_concept}. Keep the task distinct from
+previous interviews when possible.
 
 Return ONLY valid JSON in this exact shape:
 {{
@@ -223,13 +247,14 @@ Return ONLY valid JSON in this exact shape:
   ]
 }}
 
-Use Python unless another language is clearly more appropriate. The starter code
-must read from standard input and print the answer so Wandbox can execute it.
-Test cases must be deterministic and the expected output must exactly match stdout
+Use Python unless another language is clearly more appropriate. The starter_code must be a simple, runnable starting point with a clearly marked TODO
+for the candidate to complete (not a deliberately tricky or advanced buggy implementation).
+The candidate should complete/fix it and then explain the approach. It must read from standard input and print the answer so Wandbox
+can execute it. Test cases must be deterministic and expected output must exactly match stdout
 after normal whitespace trimming.
 """
 
-    raw = clean_json(await ask_ai(prompt, temperature=0.2))
+    raw = clean_json(await ask_ai(prompt, temperature=0.85))
     try:
         problem = json.loads(raw)
     except json.JSONDecodeError:
@@ -424,7 +449,7 @@ Do not claim tests passed unless the Wandbox output matches the expected output.
 Score correctness, code quality, and complexity from 0 to 100.
 """
 
-    raw = clean_json(await ask_ai(prompt, temperature=0.2))
+    raw = clean_json(await ask_ai(prompt, temperature=0.85))
     try:
         return json.loads(raw)
     except json.JSONDecodeError:
@@ -455,6 +480,7 @@ async def start_interview(request: StartInterviewRequest):
         "code_submission": None,
         "code_execution": None,
         "code_review": None,
+        "code_explanation": "",
         "rounds": [],
     }
 
@@ -488,14 +514,18 @@ async def submit_answer(request: AnswerRequest):
     current["answer"] = request.answer.strip()
     current["answer_received_at"] = now()
 
-    # Round 5 is the coding round. Spoken answers stop at round 4.
+    # Round 5 includes code submission followed by a spoken explanation.
     if section["current_round"] >= 5:
+        section["code_explanation"] = request.answer.strip()
+        current["explanation"] = request.answer.strip()
+        current["explanation_received_at"] = now()
         save_section(section)
         return {
             "section_id": request.section_id,
             "round": 5,
             "total_rounds": 5,
             "round_type": "coding",
+            "explanation_saved": True,
             "completed": False,
         }
 
@@ -504,6 +534,8 @@ async def submit_answer(request: AnswerRequest):
     if section["current_round"] == 5:
         problem = await generate_coding_problem(section)
         section["coding_problem"] = problem
+        # Round 5 must be spoken too, just like every other interview question.
+        audio_url = await make_tts(problem["question"], request.section_id, 5)
         section["rounds"].append({
             "round": 5,
             "question": problem["question"],
@@ -518,7 +550,7 @@ async def submit_answer(request: AnswerRequest):
             "round": 5,
             "total_rounds": 5,
             "question": problem["question"],
-            "audio_url": "",
+            "audio_url": audio_url,
             "round_type": "coding",
             "coding_problem": problem,
             "completed": False,
@@ -585,8 +617,10 @@ async def submit_code(request: CodeSubmitRequest):
 async def complete_interview(request: CompleteInterviewRequest):
     section = load_section(request.section_id)
     history = interview_history(section)
+    if section.get("code_explanation"):
+        history += "\n\nCandidate explanation of submitted code:\n" + section["code_explanation"]
     if not history:
-        raise HTTPException(status_code=400, detail="There are no interview answers to evaluate")
+        history = "The candidate skipped all questions and did not provide an answer."
 
     prompt = f"""
 You are the final evaluator for a technical interview.
@@ -619,7 +653,7 @@ Scores must be integers from 0 to 100. Base the result on the candidate's real
 spoken answers and the actual code review. Do not invent evidence.
 """
 
-    raw = clean_json(await ask_ai(prompt, temperature=0.2))
+    raw = clean_json(await ask_ai(prompt, temperature=0.85))
     try:
         result = json.loads(raw)
     except json.JSONDecodeError:
@@ -744,6 +778,7 @@ async def speech_to_text(websocket: WebSocket, section_id: str):
         "&vad_events=true"
         "&endpointing=1500"
         "&utterance_end_ms=3000"
+        "&container=webm"
     )
 
     try:
@@ -776,19 +811,24 @@ async def speech_to_text(websocket: WebSocket, section_id: str):
                         if isinstance(raw, bytes):
                             continue
                         data = json.loads(raw)
-                        if data.get("type") != "Results":
+                        event_type = data.get("type")
+                        # Deepgram emits UtteranceEnd separately from Results. Forward it
+                        # so the browser can finalize an answer even when the endpoint
+                        # event itself contains no transcript text.
+                        if event_type == "UtteranceEnd":
+                            await websocket.send_json({"type": "utterance_end"})
+                            continue
+                        if event_type != "Results":
                             continue
 
                         alternatives = data.get("channel", {}).get("alternatives", [])
                         text = alternatives[0].get("transcript", "").strip() if alternatives else ""
-                        if not text:
-                            continue
-
                         await websocket.send_json({
                             "type": "transcript",
                             "transcript": text,
                             "is_final": bool(data.get("is_final")),
                             "speech_final": bool(data.get("speech_final")),
+                            "is_final": bool(data.get("is_final")),
                         })
                 except Exception:
                     pass
