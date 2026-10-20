@@ -1,4 +1,4 @@
-export type NavTab = 'home' | 'practices' | 'analytics' | 'best-practices' | 'review' | 'live-practice' | 'practice-setup' | 'history';
+export type NavTab = 'home' | 'practices' | 'analytics' | 'best-practices' | 'review' | 'live-practice' | 'practice-setup' | 'history' | 'settings' | 'profile';
 
 export interface InterviewConfig {
   difficulty: 'Beginner' | 'Intermediate' | 'Advanced';

@@ -12,6 +12,7 @@ import { AnalyticsView } from './views/AnalyticsView';
 import { BestPracticesView } from './views/BestPracticesView';
 import { HistoryView } from './views/HistoryView';
 import { SettingsModal } from './components/SettingsModal';
+import { ProfileView } from './views/ProfileView';
 import LoginPage, { UserAuthData } from './views/auth/LoginPage';
 import { generateSessionId, extractSessionIdFromUrl } from './utils/session';
 import type { InterviewEvaluation } from './services/liveInterview';
@@ -21,7 +22,13 @@ export default function App() {
     const saved = localStorage.getItem('intertrain_user');
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const u = JSON.parse(saved);
+        if (u && typeof u.name === 'string' && (u.name.includes('(') || u.name === 'Developer')) {
+          u.name = 'Developer';
+          u.email = 'developer@intertrain.io';
+          localStorage.setItem('intertrain_user', JSON.stringify(u));
+        }
+        return u;
       } catch {
         return null;
       }
@@ -132,7 +139,7 @@ export default function App() {
       );
       currentOverrides[historyId] = newTitle;
       localStorage.setItem('intertrain_custom_history_titles', JSON.stringify(currentOverrides));
-    } catch {}
+    } catch { }
   };
 
   const handleLogin = (userData: UserAuthData) => {
@@ -192,7 +199,7 @@ export default function App() {
     const matchedTrack =
       PRACTICE_TRACKS.find(
         (t) => t.title.toLowerCase().includes(folderTitle.toLowerCase()) ||
-               folderTitle.toLowerCase().includes(t.title.toLowerCase())
+          folderTitle.toLowerCase().includes(t.title.toLowerCase())
       ) || PRACTICE_TRACKS[0];
 
     const newSessionId = generateSessionId();
@@ -222,12 +229,12 @@ export default function App() {
     const folderId = completedSession.track.id.includes('devops')
       ? 'devops'
       : completedSession.track.id.includes('ai')
-      ? 'devops' // or add new
-      : completedSession.track.id.includes('data')
-      ? 'data-manager'
-      : completedSession.track.id.includes('backend')
-      ? 'backend'
-      : 'ui-ux';
+        ? 'devops' // or add new
+        : completedSession.track.id.includes('data')
+          ? 'data-manager'
+          : completedSession.track.id.includes('backend')
+            ? 'backend'
+            : 'ui-ux';
 
     const targetFolder = folders.find((f) => f.id === folderId) || folders[0];
     const newAttemptNumber = targetFolder.attempts.length + 1;
@@ -248,10 +255,10 @@ export default function App() {
         completedSession.evaluation?.improvements?.length
           ? completedSession.evaluation.improvements
           : [
-              'State concrete execution metrics before walking through architecture.',
-              'Keep verbal cadence steady and confident when handling edge cases.',
-              'Well done on the code syntax and test validation pass.',
-            ],
+            'State concrete execution metrics before walking through architecture.',
+            'Keep verbal cadence steady and confident when handling edge cases.',
+            'Well done on the code syntax and test validation pass.',
+          ],
       metrics: {
         confidence: completedSession.evaluation?.communication ?? Math.min(95, 75 + newAttemptNumber * 5),
         technicalAccuracy: completedSession.evaluation?.technical_accuracy ?? 88,
@@ -292,7 +299,7 @@ export default function App() {
 
   // If not authenticated, render the Sign Up / Login page
   if (!currentUser) {
-    return <LoginPage onLogin={handleLogin} initialMode="signup" />;
+    return <LoginPage onLogin={handleLogin} initialMode="signin" />;
   }
 
   // If in live practice session, render full screen as in Screenshot 5 & 6
@@ -332,7 +339,7 @@ export default function App() {
         </span>
 
         <button
-          onClick={() => setIsSettingsOpen(true)}
+          onClick={() => setCurrentTab('settings')}
           className="w-8 h-8 rounded-full overflow-hidden border border-slate-700"
         >
           <div className="w-full h-full bg-blue-600 flex items-center justify-center text-xs font-bold text-white">
@@ -356,7 +363,7 @@ export default function App() {
           selectedFolderId={currentTab === 'review' ? selectedFolderId : undefined}
           selectedHistoryId={currentTab === 'review' ? selectedHistoryId : null}
           onSelectFolder={handleSelectFolder}
-          onOpenSettings={() => setIsSettingsOpen(true)}
+          onOpenSettings={() => setCurrentTab('settings')}
           isMobileOpen={isMobileSidebarOpen}
           onCloseMobile={() => setIsMobileSidebarOpen(false)}
           currentUser={currentUser}
@@ -445,6 +452,23 @@ export default function App() {
           {currentTab === 'best-practices' && (
             <BestPracticesView
               onStartPractice={() => setCurrentTab('practices')}
+            />
+          )}
+
+          {(currentTab === 'settings' || currentTab === 'profile') && (
+            <ProfileView
+              userName={currentUser?.name}
+              userEmail={currentUser?.email}
+              onUpdateUser={(updated) => {
+                setCurrentUser((prev) => {
+                  const neu = { ...(prev || { isGuest: false }), name: updated.name, email: updated.email };
+                  localStorage.setItem('intertrain_user', JSON.stringify(neu));
+                  return neu;
+                });
+              }}
+              onStartPractice={() => setCurrentTab('practices')}
+              onNavigateTab={(tab) => setCurrentTab(tab)}
+              onResetData={handleResetData}
             />
           )}
         </main>

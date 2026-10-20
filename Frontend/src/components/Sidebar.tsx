@@ -500,9 +500,9 @@ export function Sidebar({
               <button
                 onClick={() => {
                   setShowProfileMenu(false);
-                  onOpenSettings();
+                  onSelectTab('settings');
                 }}
-                className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-800 transition-colors text-left"
+                className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium text-slate-300 hover:text-white hover:bg-slate-800 transition-colors text-left cursor-pointer"
               >
                 <Settings className="w-4 h-4 text-slate-400" />
                 <span>Settings</span>
